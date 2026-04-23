@@ -1,0 +1,6 @@
+src_ip,dst_ip,duration,src_bytes,dst_bytes,service,flag,note
+192.168.1.10,10.0.0.2,1.2,240,120,http,SF,normal access
+192.168.1.11,10.0.0.5,4.8,8200,1200,http,S0,dos flood traffic
+192.168.1.12,10.0.0.8,2.1,510,100,ssh,REJ,probe scan
+192.168.1.15,10.0.0.3,8.4,1200,75,ftp,RSTR,r2l password guess
+192.168.1.19,10.0.0.9,0.6,64,40,tcp,SF,u2r privilege overflow
