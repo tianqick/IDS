@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Dict, Optional
 
 from flask import current_app
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from ..extensions import db
@@ -142,23 +143,29 @@ def _flush_detection_buffers(result_buffer, alarm_buffer, batch_threshold: int) 
 def build_dashboard_stats(current_user_id: Optional[int] = None, role: str = "admin") -> Dict[str, object]:
     from ..models import AlarmLog, AttackResult, DatasetInfo, DetectRecord, User
 
-    records_query = DetectRecord.query.order_by(DetectRecord.detect_time.desc())
+    records_query = DetectRecord.query
     results_query = AttackResult.query
-    alarms_query = AlarmLog.query.order_by(AlarmLog.create_time.desc())
+    alarms_query = AlarmLog.query
 
     if role != "admin" and current_user_id is not None:
         records_query = records_query.filter(DetectRecord.user_id == current_user_id)
         results_query = results_query.join(DetectRecord).filter(DetectRecord.user_id == current_user_id)
         alarms_query = alarms_query.join(DetectRecord).filter(DetectRecord.user_id == current_user_id)
 
-    records = records_query.all()
-    results = results_query.all()
-    alarms = alarms_query.limit(5).all()
+    recent_records = records_query.order_by(DetectRecord.detect_time.desc()).limit(7).all()
+    latest_records = recent_records[:5]
+    alarms = alarms_query.order_by(AlarmLog.create_time.desc()).limit(5).all()
     alarm_count = alarms_query.count()
+    record_count = records_query.count()
 
-    attack_distribution = Counter(item.attack_type for item in results)
+    attack_distribution_rows = (
+        results_query.with_entities(AttackResult.attack_type, func.count(AttackResult.id))
+        .group_by(AttackResult.attack_type)
+        .all()
+    )
+    attack_distribution = {attack_type: count for attack_type, count in attack_distribution_rows}
     trend = {}
-    for record in records[:7]:
+    for record in recent_records:
         day_label = record.detect_time.strftime("%m-%d")
         trend.setdefault(day_label, 0)
         trend[day_label] += record.attack_count
@@ -166,13 +173,13 @@ def build_dashboard_stats(current_user_id: Optional[int] = None, role: str = "ad
     return {
         "user_count": User.query.count() if role == "admin" else 1,
         "dataset_count": DatasetInfo.query.count(),
-        "record_count": len(records),
+        "record_count": record_count,
         "alarm_count": alarm_count if role != "admin" else AlarmLog.query.count(),
-        "attack_distribution": dict(attack_distribution),
+        "attack_distribution": attack_distribution,
         "trend_labels": list(reversed(list(trend.keys()))),
         "trend_values": list(reversed(list(trend.values()))),
         "recent_alarms": [serialize_alarm_brief(item) for item in alarms],
-        "recent_records": [serialize_record_brief(item) for item in records[:5]],
+        "recent_records": [serialize_record_brief(item) for item in latest_records],
     }
 
 

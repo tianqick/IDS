@@ -51,6 +51,8 @@ createApp({
     const uploadFile = ref(null);
     const modelFile = ref(null);
     const taskPollTimer = ref(null);
+    const attackChart = ref(null);
+    const trendChart = ref(null);
     const isAuthenticated = computed(() => Boolean(appState.user));
     const isAdmin = computed(() => appState.user?.role === "admin");
     const selectedModel = computed(() =>
@@ -562,8 +564,10 @@ createApp({
       const trendChartDom = document.getElementById("trendChart");
 
       if (attackChartDom) {
-        const chart = echarts.init(attackChartDom);
-        chart.setOption({
+        if (!attackChart.value) {
+          attackChart.value = echarts.getInstanceByDom(attackChartDom) || echarts.init(attackChartDom);
+        }
+        attackChart.value.setOption({
           tooltip: { trigger: "item" },
           color: ["#b45309", "#047857", "#1d4ed8", "#b91c1c", "#7c3aed", "#0f766e"],
           series: [{
@@ -577,8 +581,10 @@ createApp({
       }
 
       if (trendChartDom) {
-        const chart = echarts.init(trendChartDom);
-        chart.setOption({
+        if (!trendChart.value) {
+          trendChart.value = echarts.getInstanceByDom(trendChartDom) || echarts.init(trendChartDom);
+        }
+        trendChart.value.setOption({
           tooltip: { trigger: "axis" },
           grid: { left: 36, right: 24, top: 20, bottom: 28 },
           xAxis: { type: "category", data: appState.dashboard.trend_labels || [], boundaryGap: false },

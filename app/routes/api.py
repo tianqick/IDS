@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import wraps
 import threading
 from pathlib import Path
+from sqlalchemy import func
 from werkzeug.utils import secure_filename
 
 from flask import Blueprint, current_app, jsonify, request, session
@@ -465,12 +466,14 @@ def update_alarm(alarm_id: int):
 
 
 @api_bp.get("/metrics")
-@admin_required
+@login_required
 def metrics():
-    records = DetectRecord.query.order_by(DetectRecord.detect_time.desc()).all()
-    total_samples = sum(item.sample_count for item in records)
-    total_attacks = sum(item.attack_count for item in records)
-    total_normals = sum(item.normal_count for item in records)
+    totals = current_user_filters(DetectRecord.query, DetectRecord).with_entities(
+        func.coalesce(func.sum(DetectRecord.sample_count), 0),
+        func.coalesce(func.sum(DetectRecord.attack_count), 0),
+        func.coalesce(func.sum(DetectRecord.normal_count), 0),
+    ).first()
+    total_samples, total_attacks, total_normals = [int(value or 0) for value in totals]
     model_id = request.args.get("model_id", type=int)
 
     model = None
@@ -534,7 +537,7 @@ def models():
 @admin_required
 def traffic_monitor_status():
     active_model = get_active_model()
-    status = traffic_monitor_service.status()
+    status = traffic_monitor_service.status(current_app._get_current_object())
     status["active_model"] = serialize_model(active_model) if active_model else None
     return jsonify({"ok": True, "data": status})
 
@@ -563,7 +566,7 @@ def update_traffic_monitor_config():
 @admin_required
 def start_traffic_monitor():
     started = traffic_monitor_service.start(current_app._get_current_object())
-    status = traffic_monitor_service.status()
+    status = traffic_monitor_service.status(current_app._get_current_object())
     active_model = get_active_model()
     status["active_model"] = serialize_model(active_model) if active_model else None
     return jsonify({"ok": True, "started": started, "data": status})
@@ -573,7 +576,7 @@ def start_traffic_monitor():
 @admin_required
 def stop_traffic_monitor():
     stopped = traffic_monitor_service.stop()
-    status = traffic_monitor_service.status()
+    status = traffic_monitor_service.status(current_app._get_current_object())
     active_model = get_active_model()
     status["active_model"] = serialize_model(active_model) if active_model else None
     return jsonify({"ok": True, "stopped": stopped, "data": status})

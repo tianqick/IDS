@@ -28,6 +28,7 @@ class TrafficMonitorService:
             "poll_interval": 0,
             "capture_interface": "",
             "capture_duration": 0,
+            "scapy_ready": False,
             "tshark_ready": False,
             "cicflowmeter_ready": False,
             "pipeline_ready": False,
@@ -67,7 +68,9 @@ class TrafficMonitorService:
             self._status["running"] = False
             return True
 
-    def status(self):
+    def status(self, app=None):
+        if app is not None:
+            self._app = app
         snapshot = dict(self._status)
         if self._app is not None:
             snapshot.update(self._build_status_snapshot(self._app))
@@ -90,13 +93,13 @@ class TrafficMonitorService:
 
     def _build_status_snapshot(self, app):
         self._load_settings()
-        tshark_path = str(app.config.get("TSHARK_PATH", "")).strip()
         extractor_command = str(app.config.get("CICFLOWMETER_COMMAND", "")).strip()
-        tshark_ready = bool(tshark_path and Path(tshark_path).exists())
+        scapy_ready = self._scapy_available()
         cic_ready = bool(extractor_command)
         capture_interface = str(self._settings.get("capture_interface") or app.config.get("TRAFFIC_CAPTURE_INTERFACE", "")).strip()
-        available_interfaces = self._discover_interfaces(tshark_path) if tshark_ready else []
-        pipeline_ready = tshark_ready and cic_ready and bool(capture_interface)
+        available_interfaces = self._discover_interfaces() if scapy_ready else []
+        resolved_interface = self._resolve_capture_interface(capture_interface, available_interfaces)
+        pipeline_ready = scapy_ready and cic_ready and bool(resolved_interface)
         return {
             "input_dir": app.config["TRAFFIC_FLOW_INPUT_DIR"],
             "archive_dir": app.config["TRAFFIC_FLOW_ARCHIVE_DIR"],
@@ -105,7 +108,8 @@ class TrafficMonitorService:
             "poll_interval": app.config["TRAFFIC_MONITOR_INTERVAL"],
             "capture_interface": capture_interface,
             "capture_duration": app.config["TRAFFIC_CAPTURE_DURATION"],
-            "tshark_ready": tshark_ready,
+            "scapy_ready": scapy_ready,
+            "tshark_ready": scapy_ready,
             "cicflowmeter_ready": cic_ready,
             "pipeline_ready": pipeline_ready,
             "available_interfaces": available_interfaces,
@@ -143,7 +147,7 @@ class TrafficMonitorService:
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
         pcap_path = pcap_dir / f"traffic_{timestamp}.pcapng"
         csv_path = flow_input_dir / f"traffic_{timestamp}.csv"
-        self._run_tshark_capture(pcap_path)
+        self._run_scapy_capture(pcap_path)
         self._status["last_generated_pcap"] = pcap_path.name
         self._status["last_capture_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         self._run_cicflowmeter_extract(pcap_path, csv_path)
@@ -152,15 +156,25 @@ class TrafficMonitorService:
         archived_pcap = self._unique_destination(pcap_archive_dir, pcap_path.name)
         pcap_path.replace(archived_pcap)
 
-    def _run_tshark_capture(self, pcap_path: Path):
-        tshark_path = self._app.config["TSHARK_PATH"]
-        interface = str(self._settings.get("capture_interface") or self._app.config["TRAFFIC_CAPTURE_INTERFACE"]).strip()
+    def _run_scapy_capture(self, pcap_path: Path):
+        sniff, wrpcap, _ = self._require_scapy()
+        configured_interface = str(
+            self._settings.get("capture_interface") or self._app.config["TRAFFIC_CAPTURE_INTERFACE"]
+        ).strip()
+        interface = self._resolve_capture_interface(configured_interface)
+        if not interface:
+            raise RuntimeError("Traffic capture interface is not configured or could not be resolved.")
         duration = self._app.config["TRAFFIC_CAPTURE_DURATION"]
         capture_filter = str(self._app.config.get("TRAFFIC_CAPTURE_FILTER", "")).strip()
-        command = [tshark_path, "-i", interface, "-a", f"duration:{duration}", "-w", str(pcap_path)]
+        sniff_kwargs = {
+            "iface": interface,
+            "timeout": duration,
+            "store": True,
+        }
         if capture_filter:
-            command.extend(["-f", capture_filter])
-        self._run_command(command, "tshark capture")
+            sniff_kwargs["filter"] = capture_filter
+        packets = sniff(**sniff_kwargs)
+        wrpcap(str(pcap_path), packets)
 
     def _run_cicflowmeter_extract(self, pcap_path: Path, csv_path: Path):
         template = str(self._app.config["CICFLOWMETER_COMMAND"]).strip()
@@ -253,29 +267,51 @@ class TrafficMonitorService:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(self._settings, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def _discover_interfaces(self, tshark_path: str):
-        if not tshark_path:
-            return []
+    def _discover_interfaces(self):
         try:
-            completed = subprocess.run(
-                [tshark_path, "-D"],
-                capture_output=True,
-                text=False,
-                timeout=15,
-            )
-        except OSError:
+            _, _, conf = self._require_scapy()
+        except RuntimeError:
             return []
-        if completed.returncode != 0:
-            return []
+
         items = []
-        stdout = self._decode_process_output(completed.stdout)
-        for raw_line in stdout.splitlines():
-            line = raw_line.strip()
-            if not line or "." not in line:
+        seen = set()
+        for index, iface in enumerate(conf.ifaces.values(), start=1):
+            name = str(getattr(iface, "name", "") or getattr(iface, "network_name", "") or "").strip()
+            if not name or name in seen:
                 continue
-            index, description = line.split(".", 1)
-            items.append({"id": index.strip(), "label": description.strip()})
+            seen.add(name)
+            description = str(
+                getattr(iface, "description", "")
+                or getattr(iface, "network_name", "")
+                or getattr(iface, "friendly_name", "")
+                or name
+            ).strip()
+            items.append({"id": str(index), "name": name, "label": description})
         return items
+
+    def _resolve_capture_interface(self, capture_interface: str, available_interfaces=None) -> str:
+        raw_value = str(capture_interface or "").strip()
+        if not raw_value:
+            return ""
+        items = available_interfaces if available_interfaces is not None else self._discover_interfaces()
+        for item in items:
+            if raw_value in {str(item.get("id", "")).strip(), str(item.get("name", "")).strip()}:
+                return str(item.get("name", "")).strip()
+        return raw_value
+
+    def _scapy_available(self) -> bool:
+        try:
+            self._require_scapy()
+            return True
+        except RuntimeError:
+            return False
+
+    def _require_scapy(self):
+        try:
+            from scapy.all import conf, sniff, wrpcap
+        except ImportError as exc:
+            raise RuntimeError("Scapy is not installed. Please install it with pip install scapy.") from exc
+        return sniff, wrpcap, conf
 
     def _decode_process_output(self, output: bytes | str | None) -> str:
         if output is None:

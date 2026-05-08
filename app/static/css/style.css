@@ -549,6 +549,102 @@ a {
     border-radius: 14px;
 }
 
+.capability-trigger {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+}
+
+.model-capabilities-panel {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    bottom: 18px;
+    width: min(520px, calc(100vw - 36px));
+    padding: 24px;
+    overflow-y: auto;
+    background: rgba(255, 253, 248, 0.98);
+    border: 1px solid rgba(231, 220, 203, 0.95);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    transform: translateX(calc(100% + 24px));
+    transition: transform 220ms ease;
+    z-index: 1400;
+}
+
+.model-capabilities-panel.open {
+    transform: translateX(0);
+}
+
+.capability-panel-head,
+.capability-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.capability-panel-head {
+    margin-bottom: 18px;
+}
+
+.capability-panel-head h2,
+.capability-header h3 {
+    margin: 8px 0 0;
+}
+
+.capability-header p,
+.capability-section p {
+    color: var(--muted);
+}
+
+.capability-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 18px 0;
+}
+
+.capability-metric-card,
+.capability-section {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 16px;
+}
+
+.capability-metric-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.84rem;
+}
+
+.capability-metric-card strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 1.35rem;
+}
+
+.capability-section + .capability-section {
+    margin-top: 12px;
+}
+
+.capability-section h4 {
+    margin: 0 0 10px;
+    font-size: 1rem;
+}
+
+.capability-columns {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--muted);
+}
+
+.capabilities-open {
+    overflow: hidden;
+}
+
 @media (max-width: 1100px) {
     .hero-panel,
     .stats-grid,
@@ -580,5 +676,17 @@ a {
     .topbar,
     .page-header {
         flex-direction: column;
+    }
+
+    .model-capabilities-panel {
+        top: 12px;
+        right: 12px;
+        bottom: 12px;
+        width: calc(100vw - 24px);
+        padding: 18px;
+    }
+
+    .capability-metric-grid {
+        grid-template-columns: 1fr;
     }
 }
