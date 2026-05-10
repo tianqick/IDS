@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from functools import wraps
+import ipaddress
+import socket
 import threading
 from pathlib import Path
 from sqlalchemy import func
@@ -27,16 +29,94 @@ api_bp = Blueprint("api", __name__, url_prefix="/api")
 
 DEFAULT_MODEL_REQUIRED_COLUMNS = [
     "Flow ID",
-    "Source IP",
-    "Source Port",
-    "Destination IP",
-    "Destination Port",
+    "Src IP",
+    "Src Port",
+    "Dst IP",
+    "Dst Port",
+    "Protocol",
     "Timestamp",
-    "Label (optional for detection, used in training/evaluation)",
+    "Flow Duration",
+    "Total Fwd Packet",
+    "Total Bwd packets",
+    "Total Length of Fwd Packet",
+    "Total Length of Bwd Packet",
+    "Fwd Packet Length Max",
+    "Fwd Packet Length Min",
+    "Fwd Packet Length Mean",
+    "Fwd Packet Length Std",
+    "Bwd Packet Length Max",
+    "Bwd Packet Length Min",
+    "Bwd Packet Length Mean",
+    "Bwd Packet Length Std",
+    "Flow Bytes/s",
+    "Flow Packets/s",
+    "Flow IAT Mean",
+    "Flow IAT Std",
+    "Flow IAT Max",
+    "Flow IAT Min",
+    "Fwd IAT Total",
+    "Fwd IAT Mean",
+    "Fwd IAT Std",
+    "Fwd IAT Max",
+    "Fwd IAT Min",
+    "Bwd IAT Total",
+    "Bwd IAT Mean",
+    "Bwd IAT Std",
+    "Bwd IAT Max",
+    "Bwd IAT Min",
+    "Fwd PSH Flags",
+    "Bwd PSH Flags",
+    "Fwd URG Flags",
+    "Bwd URG Flags",
+    "Fwd Header Length",
+    "Bwd Header Length",
+    "Fwd Packets/s",
+    "Bwd Packets/s",
+    "Packet Length Min",
+    "Packet Length Max",
+    "Packet Length Mean",
+    "Packet Length Std",
+    "Packet Length Variance",
+    "FIN Flag Count",
+    "SYN Flag Count",
+    "RST Flag Count",
+    "PSH Flag Count",
+    "ACK Flag Count",
+    "URG Flag Count",
+    "CWR Flag Count",
+    "ECE Flag Count",
+    "Down/Up Ratio",
+    "Average Packet Size",
+    "Fwd Segment Size Avg",
+    "Bwd Segment Size Avg",
+    "Fwd Bytes/Bulk Avg",
+    "Fwd Packet/Bulk Avg",
+    "Fwd Bulk Rate Avg",
+    "Bwd Bytes/Bulk Avg",
+    "Bwd Packet/Bulk Avg",
+    "Bwd Bulk Rate Avg",
+    "Subflow Fwd Packets",
+    "Subflow Fwd Bytes",
+    "Subflow Bwd Packets",
+    "Subflow Bwd Bytes",
+    "FWD Init Win Bytes",
+    "Bwd Init Win Bytes",
+    "Fwd Act Data Pkts",
+    "Fwd Seg Size Min",
+    "Active Mean",
+    "Active Std",
+    "Active Max",
+    "Active Min",
+    "Idle Mean",
+    "Idle Std",
+    "Idle Max",
+    "Idle Min",
+    "Label (required for training/evaluation, optional for detection)",
 ]
 DEFAULT_MODEL_DATASET_FORMAT = (
-    "CSV with CIC-IDS style traffic features and a header row. "
-    "Training/evaluation data should include Label; detection uploads may omit Label."
+    "CSV exported from CIC-IDS2017 / CICFlowMeter with the original header row. "
+    "Training and evaluation data must include the Label column; online detection uploads may omit Label, "
+    "but the remaining feature columns should keep the original CIC-IDS2017 names and order."
 )
 
 
@@ -168,6 +248,49 @@ def serialize_task(task: DetectionTask):
     }
 
 
+def serialize_server_access() -> dict:
+    host_header = request.host or "127.0.0.1:5000"
+    if ":" in host_header:
+        _, port = host_header.rsplit(":", 1)
+    else:
+        port = "5000"
+
+    candidates = []
+    seen = set()
+    for host in ("127.0.0.1", "localhost"):
+        url = f"http://{host}:{port}"
+        if url not in seen:
+            seen.add(url)
+            candidates.append({"label": host, "url": url, "type": "local"})
+
+    try:
+        hostnames = {socket.gethostname(), socket.getfqdn()}
+        for hostname in hostnames:
+            for family, _, _, _, sockaddr in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                if family != socket.AF_INET:
+                    continue
+                ip = sockaddr[0]
+                try:
+                    ip_obj = ipaddress.ip_address(ip)
+                except ValueError:
+                    continue
+                if ip_obj.is_loopback or ip_obj.is_link_local or not ip_obj.is_private:
+                    continue
+                url = f"http://{ip}:{port}"
+                if url in seen:
+                    continue
+                seen.add(url)
+                candidates.append({"label": ip, "url": url, "type": "lan"})
+    except socket.gaierror:
+        pass
+
+    return {
+        "port": int(port),
+        "items": candidates,
+        "recommended_url": next((item["url"] for item in candidates if item["type"] == "lan"), candidates[0]["url"]),
+    }
+
+
 def _run_detection_task(app, task_id: int, user_id: int, username: str):
     with app.app_context():
         task = DetectionTask.query.get(task_id)
@@ -258,12 +381,12 @@ def logout():
 @api_bp.get("/auth/me")
 def me():
     if "user_id" not in session:
-        return jsonify({"ok": True, "authenticated": False, "user": None})
+        return jsonify({"ok": True, "authenticated": False, "user": None, "server_access": serialize_server_access()})
     user = User.query.get(session["user_id"])
     if not user:
         session.clear()
-        return jsonify({"ok": True, "authenticated": False, "user": None})
-    return jsonify({"ok": True, "authenticated": True, "user": serialize_user(user)})
+        return jsonify({"ok": True, "authenticated": False, "user": None, "server_access": serialize_server_access()})
+    return jsonify({"ok": True, "authenticated": True, "user": serialize_user(user), "server_access": serialize_server_access()})
 
 
 @api_bp.post("/auth/init-demo")
@@ -437,8 +560,37 @@ def history():
 @api_bp.get("/alarms")
 @admin_required
 def alarms():
-    items = AlarmLog.query.order_by(AlarmLog.create_time.desc()).all()
-    return jsonify({"ok": True, "items": [serialize_alarm(item) for item in items]})
+    page = max(request.args.get("page", default=1, type=int) or 1, 1)
+    page_size = max(request.args.get("page_size", default=20, type=int) or 20, 1)
+    page_size = min(page_size, 100)
+    status = str(request.args.get("status", "all") or "all").strip()
+
+    query = AlarmLog.query.join(DetectRecord, AlarmLog.record_id == DetectRecord.id).filter(
+        DetectRecord.source_file.like("traffic_%")
+    )
+    if status in {"unprocessed", "processed", "ignored"}:
+        query = query.filter(AlarmLog.status == status)
+
+    pagination = query.order_by(AlarmLog.create_time.desc()).paginate(
+        page=page,
+        per_page=page_size,
+        error_out=False,
+    )
+    return jsonify(
+        {
+            "ok": True,
+            "items": [serialize_alarm(item) for item in pagination.items],
+            "pagination": {
+                "page": pagination.page,
+                "page_size": page_size,
+                "total": pagination.total,
+                "pages": pagination.pages,
+                "has_prev": pagination.has_prev,
+                "has_next": pagination.has_next,
+                "status": status,
+            },
+        }
+    )
 
 
 @api_bp.patch("/alarms/<int:alarm_id>")

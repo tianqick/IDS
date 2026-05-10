@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import subprocess
 import threading
 import json
@@ -43,6 +44,7 @@ class TrafficMonitorService:
             "last_generated_csv": None,
             "last_error": None,
             "processed_count": 0,
+            "empty_feature_count": 0,
         }
 
     def start(self, app):
@@ -145,7 +147,7 @@ class TrafficMonitorService:
 
     def _capture_and_extract_once(self, pcap_dir: Path, flow_input_dir: Path, pcap_archive_dir: Path):
         timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        pcap_path = pcap_dir / f"traffic_{timestamp}.pcapng"
+        pcap_path = pcap_dir / f"traffic_{timestamp}.pcap"
         csv_path = flow_input_dir / f"traffic_{timestamp}.csv"
         self._run_scapy_capture(pcap_path)
         self._status["last_generated_pcap"] = pcap_path.name
@@ -177,15 +179,9 @@ class TrafficMonitorService:
         wrpcap(str(pcap_path), packets)
 
     def _run_cicflowmeter_extract(self, pcap_path: Path, csv_path: Path):
-        template = str(self._app.config["CICFLOWMETER_COMMAND"]).strip()
-        if not template:
+        command = self._build_cicflowmeter_command(pcap_path, csv_path)
+        if not command:
             raise RuntimeError("CICFLOWMETER_COMMAND is not configured.")
-        command = template.format(
-            pcap=str(pcap_path),
-            csv=str(csv_path),
-            output_dir=str(csv_path.parent),
-            output_name=csv_path.name,
-        )
         self._run_command(command, "CICFlowMeter extraction")
         if not csv_path.exists():
             csv_candidates = sorted(csv_path.parent.glob(f"{csv_path.stem}*.csv"))
@@ -196,20 +192,64 @@ class TrafficMonitorService:
         if not csv_path.exists():
             raise RuntimeError("CICFlowMeter did not produce the expected CSV output.")
 
-    def _run_command(self, command, label: str):
-        completed = subprocess.run(
-            command,
-            shell=isinstance(command, str),
-            cwd=self._app.config["UPLOAD_FOLDER"],
-            capture_output=True,
-            text=False,
-            timeout=max(self._app.config["TRAFFIC_CAPTURE_DURATION"] * 2, 30),
+    def _csv_has_data_rows(self, csv_path: Path) -> bool:
+        with csv_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
+            reader = csv.reader(csv_file)
+            next(reader, None)
+            return any(any(str(cell).strip() for cell in row) for row in reader)
+
+    def _build_cicflowmeter_command(self, pcap_path: Path, csv_path: Path):
+        jar_path = str(self._app.config.get("CICFLOWMETER_JAR_PATH", "")).strip()
+        library_path = str(self._app.config.get("JNETPCAP_LIBRARY_PATH", "")).strip()
+        if jar_path and library_path:
+            return [
+                "java",
+                f"-Djava.library.path={library_path}",
+                "-cp",
+                jar_path,
+                "cic.cs.unb.ca.ifm.Cmd",
+                str(pcap_path),
+                str(csv_path.parent),
+            ]
+
+        template = str(self._app.config.get("CICFLOWMETER_COMMAND", "")).strip()
+        if not template:
+            return None
+        return template.format(
+            pcap=str(pcap_path),
+            csv=str(csv_path),
+            output_dir=str(csv_path.parent),
+            output_name=csv_path.name,
         )
+
+    def _run_command(self, command, label: str):
+        project_root = str(Path(self._app.config["UPLOAD_FOLDER"]).resolve().parent)
+        try:
+            completed = subprocess.run(
+                command,
+                shell=isinstance(command, str),
+                cwd=project_root,
+                capture_output=True,
+                text=False,
+                timeout=max(self._app.config["TRAFFIC_CAPTURE_DURATION"] * 4, 180),
+            )
+        except subprocess.TimeoutExpired as exc:
+            output = self._decode_process_output((exc.stderr or b"") + (exc.stdout or b"")).strip()
+            raise RuntimeError(f"{label} timed out: {output or 'process did not finish in time'}") from exc
         if completed.returncode != 0:
             stderr = self._decode_process_output(completed.stderr or completed.stdout).strip()
             raise RuntimeError(f"{label} failed: {stderr or 'unknown error'}")
 
     def _process_file(self, file_path: Path, archive_dir: Path):
+        if not self._csv_has_data_rows(file_path):
+            archive_target = self._unique_destination(archive_dir, file_path.name)
+            file_path.replace(archive_target)
+            self._status["empty_feature_count"] += 1
+            self._status["last_processed_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            self._status["last_processed_file"] = archive_target.name
+            self._status["last_error"] = None
+            return
+
         active_model = get_active_model()
         system_user = User.query.filter_by(role="admin").order_by(User.id.asc()).first()
         if not system_user:

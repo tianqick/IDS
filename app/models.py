@@ -5,6 +5,7 @@ from .extensions import db
 
 class User(db.Model):
     __tablename__ = "user"
+    __table_args__ = {"comment": "系统用户表"}
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
@@ -17,6 +18,7 @@ class User(db.Model):
 
 class ModelInfo(db.Model):
     __tablename__ = "model_info"
+    __table_args__ = {"comment": "模型信息表"}
 
     id = db.Column(db.Integer, primary_key=True)
     model_name = db.Column(db.String(100), nullable=False)
@@ -38,6 +40,7 @@ class ModelInfo(db.Model):
 
 class DatasetInfo(db.Model):
     __tablename__ = "dataset_info"
+    __table_args__ = {"comment": "数据集信息表"}
 
     id = db.Column(db.Integer, primary_key=True)
     dataset_name = db.Column(db.String(100), nullable=False)
@@ -48,6 +51,7 @@ class DatasetInfo(db.Model):
 
 class DetectRecord(db.Model):
     __tablename__ = "detect_record"
+    __table_args__ = {"comment": "检测记录表"}
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
@@ -67,6 +71,7 @@ class DetectRecord(db.Model):
 
 class AttackResult(db.Model):
     __tablename__ = "attack_result"
+    __table_args__ = {"comment": "攻击结果表"}
 
     id = db.Column(db.Integer, primary_key=True)
     record_id = db.Column(
@@ -82,6 +87,7 @@ class AttackResult(db.Model):
 
 class AlarmLog(db.Model):
     __tablename__ = "alarm_log"
+    __table_args__ = {"comment": "告警日志表"}
 
     id = db.Column(db.Integer, primary_key=True)
     record_id = db.Column(
@@ -95,6 +101,7 @@ class AlarmLog(db.Model):
 
 class OperationLog(db.Model):
     __tablename__ = "operation_log"
+    __table_args__ = {"comment": "操作日志表"}
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), nullable=False)
@@ -105,6 +112,7 @@ class OperationLog(db.Model):
 
 class DetectionTask(db.Model):
     __tablename__ = "detection_task"
+    __table_args__ = {"comment": "检测任务表"}
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)

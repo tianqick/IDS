@@ -1,4 +1,4 @@
-const { createApp, reactive, ref, computed, onMounted, nextTick } = Vue;
+const { createApp, reactive, ref, computed, watch, onMounted, nextTick } = Vue;
 
 createApp({
   setup() {
@@ -28,10 +28,19 @@ createApp({
         is_active: false,
       },
       dashboard: null,
+      serverAccess: null,
       records: [],
       historyItems: [],
       recordDetail: null,
       alarms: [],
+      alarmPagination: {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        pages: 0,
+        hasPrev: false,
+        hasNext: false,
+      },
       metrics: null,
       trafficMonitor: null,
       trafficInterfaces: [],
@@ -51,6 +60,7 @@ createApp({
     const uploadFile = ref(null);
     const modelFile = ref(null);
     const taskPollTimer = ref(null);
+    const trafficMonitorTimer = ref(null);
     const attackChart = ref(null);
     const trendChart = ref(null);
     const isAuthenticated = computed(() => Boolean(appState.user));
@@ -98,9 +108,14 @@ createApp({
       );
     });
 
-    const filteredAlarms = computed(() => {
-      if (appState.alarmStatusFilter === "all") return appState.alarms;
-      return appState.alarms.filter((item) => item.status === appState.alarmStatusFilter);
+    const alarmPageNumbers = computed(() => {
+      const totalPages = Number(appState.alarmPagination.pages) || 0;
+      const currentPage = Number(appState.alarmPagination.page) || 1;
+      if (totalPages <= 0) return [];
+      const start = Math.max(1, currentPage - 2);
+      const end = Math.min(totalPages, start + 4);
+      const adjustedStart = Math.max(1, end - 4);
+      return Array.from({ length: end - adjustedStart + 1 }, (_, index) => adjustedStart + index);
     });
 
     function notify(message, type = "success") {
@@ -130,6 +145,65 @@ createApp({
         taskPollTimer.value = null;
       }
     }
+
+    function stopTrafficMonitorPolling() {
+      if (trafficMonitorTimer.value) {
+        window.clearInterval(trafficMonitorTimer.value);
+        trafficMonitorTimer.value = null;
+      }
+    }
+
+    function startTrafficMonitorPolling() {
+      stopTrafficMonitorPolling();
+      if (!isAuthenticated.value || !isAdmin.value) return;
+      if (appState.currentView !== "trafficMonitor") return;
+      trafficMonitorTimer.value = window.setInterval(() => {
+        loadTrafficMonitor().catch(() => {});
+      }, 3000);
+    }
+
+    function renderAccessQRCodes() {
+      const url = appState.serverAccess?.recommended_url || "";
+      const targets = ["accessQrLogin", "accessQrDashboard"];
+      for (const targetId of targets) {
+        const element = document.getElementById(targetId);
+        if (!element) continue;
+        element.innerHTML = "";
+        if (!url || !window.QRCode) continue;
+        new window.QRCode(element, {
+          text: url,
+          width: 132,
+          height: 132,
+          correctLevel: window.QRCode.CorrectLevel.M,
+        });
+      }
+    }
+
+    watch(
+      () => appState.alarmStatusFilter,
+      async (value, oldValue) => {
+        if (value === oldValue || appState.currentView !== "alarms" || !isAdmin.value) return;
+        appState.alarmPagination.page = 1;
+        await loadAlarms();
+      },
+    );
+
+    watch(
+      () => appState.alarmPagination.pageSize,
+      async (value, oldValue) => {
+        if (value === oldValue || appState.currentView !== "alarms" || !isAdmin.value) return;
+        appState.alarmPagination.page = 1;
+        await loadAlarms();
+      },
+    );
+
+    watch(
+      () => [appState.serverAccess?.recommended_url, appState.currentView, isAuthenticated.value],
+      async () => {
+        await nextTick();
+        renderAccessQRCodes();
+      },
+    );
 
     async function pollTask(taskId, silent = false) {
       try {
@@ -165,6 +239,7 @@ createApp({
     async function loadCurrentUser() {
       const data = await api("/api/auth/me");
       appState.user = data.user;
+      appState.serverAccess = data.server_access || null;
       if (data.authenticated) {
         await loadViewData(appState.currentView);
       }
@@ -192,6 +267,7 @@ createApp({
 
     async function logout() {
       stopTaskPolling();
+      stopTrafficMonitorPolling();
       await api("/api/auth/logout", { method: "POST" });
       appState.user = null;
       appState.currentView = "dashboard";
@@ -244,8 +320,39 @@ createApp({
     }
 
     async function loadAlarms() {
-      const data = await api("/api/alarms");
+      const query = new URLSearchParams({
+        page: String(appState.alarmPagination.page || 1),
+        page_size: String(appState.alarmPagination.pageSize || 20),
+        status: appState.alarmStatusFilter || "all",
+      });
+      const data = await api(`/api/alarms?${query.toString()}`);
       appState.alarms = data.items;
+      appState.alarmPagination = {
+        page: data.pagination?.page || 1,
+        pageSize: data.pagination?.page_size || 20,
+        total: data.pagination?.total || 0,
+        pages: data.pagination?.pages || 0,
+        hasPrev: Boolean(data.pagination?.has_prev),
+        hasNext: Boolean(data.pagination?.has_next),
+      };
+    }
+
+    async function changeAlarmStatusFilter() {
+      appState.alarmPagination.page = 1;
+      await loadAlarms();
+    }
+
+    async function changeAlarmPageSize() {
+      appState.alarmPagination.page = 1;
+      await loadAlarms();
+    }
+
+    async function goToAlarmPage(page) {
+      const targetPage = Number(page) || 1;
+      if (targetPage < 1 || targetPage === appState.alarmPagination.page) return;
+      if (appState.alarmPagination.pages && targetPage > appState.alarmPagination.pages) return;
+      appState.alarmPagination.page = targetPage;
+      await loadAlarms();
     }
 
     async function loadMetrics() {
@@ -378,6 +485,7 @@ createApp({
       try {
         const data = await api("/api/traffic-monitor/start", { method: "POST" });
         appState.trafficMonitor = data.data;
+        startTrafficMonitorPolling();
         notify("网站流量监测已启动。");
       } catch (error) {
         notify(error.message, "danger");
@@ -388,6 +496,7 @@ createApp({
       try {
         const data = await api("/api/traffic-monitor/stop", { method: "POST" });
         appState.trafficMonitor = data.data;
+        stopTrafficMonitorPolling();
         notify("网站流量监测已停止。");
       } catch (error) {
         notify(error.message, "danger");
@@ -484,6 +593,7 @@ createApp({
         });
         alarm.status = data.alarm.status;
         notify("告警状态已更新。");
+        await loadAlarms();
       } catch (error) {
         notify(error.message, "danger");
       }
@@ -517,9 +627,11 @@ createApp({
     }
 
     async function switchView(view) {
+      if (view !== "trafficMonitor") stopTrafficMonitorPolling();
       appState.currentView = view;
       if (view !== "resultDetail") appState.recordDetail = null;
       await loadViewData(view);
+      if (view === "trafficMonitor" && isAdmin.value) startTrafficMonitorPolling();
     }
 
     async function loadViewData(view) {
@@ -536,6 +648,7 @@ createApp({
       if (view === "trafficMonitor" && isAdmin.value) {
         await loadTrafficMonitor();
         await loadTrafficInterfaces();
+        startTrafficMonitorPolling();
       }
       if (view === "models" && isAdmin.value) await loadModels();
       if (view === "users" && isAdmin.value) await loadUsers();
@@ -612,7 +725,7 @@ createApp({
       navItems,
       filteredRecords,
       filteredHistoryItems,
-      filteredAlarms,
+      alarmPageNumbers,
       login,
       logout,
       initDemo,
@@ -635,6 +748,9 @@ createApp({
       deleteUser,
       deleteRecord,
       updateAlarmStatus,
+      changeAlarmStatusFilter,
+      changeAlarmPageSize,
+      goToAlarmPage,
       pollTask,
       riskClass,
       alarmStatusClass,
@@ -655,6 +771,12 @@ createApp({
             <button class="btn btn-outline-light hero-btn" @click="initDemo" :disabled="appState.initializing">
               {{ appState.initializing ? '初始化中...' : '初始化演示账号' }}
             </button>
+            <div v-if="appState.serverAccess?.recommended_url" class="upload-note" style="margin-top: 14px; color: rgba(255,255,255,0.86);">
+              <strong>手机访问：</strong><a :href="appState.serverAccess.recommended_url" target="_blank" rel="noreferrer" style="color: inherit;">{{ appState.serverAccess.recommended_url }}</a>
+            </div>
+            <div v-if="appState.serverAccess?.recommended_url" style="margin-top: 14px; display: inline-block; padding: 10px; background: rgba(255,255,255,0.92); border-radius: 8px;">
+              <div id="accessQrLogin"></div>
+            </div>
           </div>
           <div class="login-form">
             <div class="login-heading">
@@ -734,10 +856,14 @@ createApp({
                 <p class="eyebrow">系统总览</p>
                 <h2>从数据采集到告警追踪的一体化检测流程</h2>
                 <p class="hero-note">当前账号可根据角色查看不同模块。管理员负责系统配置、告警处置与用户管理，普通用户专注于检测任务与结果分析。</p>
+                <div v-if="appState.serverAccess?.recommended_url" class="upload-note" style="margin-top: 12px;">
+                  <strong>手机访问：</strong><a :href="appState.serverAccess.recommended_url" target="_blank" rel="noreferrer">{{ appState.serverAccess.recommended_url }}</a>
+                </div>
               </div>
               <div class="hero-mini-grid">
                 <div class="mini-card"><span>模型状态</span><strong>已加载</strong></div>
                 <div class="mini-card"><span>检测模式</span><strong>后台异步</strong></div>
+                <div v-if="appState.serverAccess?.recommended_url" class="mini-card"><div id="accessQrDashboard" style="display: inline-block; padding: 8px; background: #fff; border-radius: 8px;"></div></div>
               </div>
             </section>
             <section class="stats-grid">
@@ -840,6 +966,30 @@ createApp({
                   </tbody>
                 </table>
               </div>
+              <div class="table-actions" style="margin-top: 16px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div class="table-actions" style="gap: 12px; align-items: center; flex-wrap: wrap;">
+                  <span class="text-muted small">共 {{ appState.alarmPagination.total }} 条，当前第 {{ appState.alarmPagination.page }} / {{ appState.alarmPagination.pages || 1 }} 页</span>
+                  <label class="text-muted small" style="display: inline-flex; align-items: center; gap: 8px;">
+                    <span>每页</span>
+                    <select v-model="appState.alarmPagination.pageSize" class="form-select form-select-sm" style="width: 88px;">
+                      <option :value="20">20</option>
+                      <option :value="50">50</option>
+                      <option :value="100">100</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="table-actions">
+                  <button class="btn btn-sm btn-outline-secondary" @click="goToAlarmPage(appState.alarmPagination.page - 1)" :disabled="!appState.alarmPagination.hasPrev">上一页</button>
+                  <button
+                    v-for="pageNumber in alarmPageNumbers"
+                    :key="'alarm-page-' + pageNumber"
+                    class="btn btn-sm"
+                    :class="pageNumber === appState.alarmPagination.page ? 'btn-primary' : 'btn-outline-secondary'"
+                    @click="goToAlarmPage(pageNumber)"
+                  >{{ pageNumber }}</button>
+                  <button class="btn btn-sm btn-outline-secondary" @click="goToAlarmPage(appState.alarmPagination.page + 1)" :disabled="!appState.alarmPagination.hasNext">下一页</button>
+                </div>
+              </div>
             </section>
           </section>
 
@@ -850,7 +1000,7 @@ createApp({
                 <table class="table align-middle">
                   <thead><tr><th>ID</th><th>内容</th><th>等级</th><th>状态</th><th>时间</th><th>更新状态</th></tr></thead>
                   <tbody>
-                    <tr v-for="item in filteredAlarms" :key="item.id">
+                    <tr v-for="item in appState.alarms" :key="item.id">
                       <td>#{{ item.id }}</td><td>{{ item.alarm_content }}</td><td><span class="status-pill" :class="riskClass(item.alarm_level)">{{ item.alarm_level }}</span></td><td><span class="status-pill" :class="alarmStatusClass(item.status)">{{ item.status }}</span></td><td>{{ item.create_time }}</td>
                       <td><div class="table-actions"><button class="btn btn-sm btn-outline-success" @click="updateAlarmStatus(item, 'processed')">标记已处理</button><button class="btn btn-sm btn-outline-secondary" @click="updateAlarmStatus(item, 'ignored')">忽略</button><button class="btn btn-sm btn-outline-danger" @click="updateAlarmStatus(item, 'unprocessed')">重置</button></div></td>
                     </tr>
@@ -950,21 +1100,21 @@ createApp({
           <section v-if="appState.currentView === 'trafficMonitor' && isAdmin && appState.trafficMonitor">
             <section class="page-header"><div><p class="eyebrow">网站流量</p><h2>自动流量巡检</h2></div></section>
             <section class="stats-grid">
-              <article class="stat-card emphasis"><p>监测状态</p><h3>{{ appState.trafficMonitor.running ? '运行中' : '已停止' }}</h3><span>后台轮询流量特征目录</span></article>
+              <article class="stat-card emphasis"><p>监测状态</p><h3>{{ appState.trafficMonitor.running ? '监测线程已启动' : '监测线程已停止' }}</h3><span>仅表示后台线程状态，不代表已抓到流量</span></article>
               <article class="stat-card"><p>轮询间隔</p><h3>{{ appState.trafficMonitor.poll_interval || 0 }}s</h3><span>Traffic monitor interval</span></article>
               <article class="stat-card"><p>已处理文件</p><h3>{{ appState.trafficMonitor.processed_count || 0 }}</h3><span>自动送检完成的 CSV 数量</span></article>
-              <article class="stat-card"><p>当前模型</p><h3>{{ appState.trafficMonitor.active_model ? appState.trafficMonitor.active_model.model_name : '未配置' }}</h3><span>巡检会使用当前启用模型</span></article>
+              <article class="stat-card"><p>空特征文件</p><h3>{{ appState.trafficMonitor.empty_feature_count || 0 }}</h3><span>已生成 CSV 但没有有效 flow 数据行</span></article>
             </section>
             <section class="stats-grid">
-              <article class="stat-card"><p>TShark</p><h3>{{ appState.trafficMonitor.tshark_ready ? '已就绪' : '未配置' }}</h3><span>负责抓包</span></article>
+              <article class="stat-card"><p>Scapy</p><h3>{{ appState.trafficMonitor.tshark_ready ? '已就绪' : '未配置' }}</h3><span>负责抓包</span></article>
               <article class="stat-card"><p>CICFlowMeter</p><h3>{{ appState.trafficMonitor.cicflowmeter_ready ? '已就绪' : '未配置' }}</h3><span>负责生成流量特征 CSV</span></article>
-              <article class="stat-card"><p>网卡接口</p><h3>{{ appState.trafficMonitor.capture_interface || '未填写' }}</h3><span>TShark capture interface</span></article>
-              <article class="stat-card"><p>自动管道</p><h3>{{ appState.trafficMonitor.pipeline_ready ? '可运行' : '待配置' }}</h3><span>抓包 + 特征提取 + 送检</span></article>
+              <article class="stat-card"><p>网卡接口</p><h3>{{ appState.trafficMonitor.capture_interface || '未填写' }}</h3><span>Scapy capture interface</span></article>
+              <article class="stat-card"><p>当前模型</p><h3>{{ appState.trafficMonitor.active_model ? appState.trafficMonitor.active_model.model_name : '未配置' }}</h3><span>巡检会使用当前启用模型</span></article>
             </section>
             <section class="panel-grid user-layout">
               <article class="panel-card">
                 <div class="panel-title">控制台</div>
-                <p class="upload-note">配置好 TShark 与 CICFlowMeter 后，系统会自动抓网站流量、生成特征 CSV、并调用当前模型送检。</p>
+                <p class="upload-note">配置好 Scapy 与 CICFlowMeter 后，系统会自动抓网站流量、生成特征 CSV、并调用当前模型送检。</p>
                 <div class="mb-3">
                   <label class="form-label">抓包网卡</label>
                   <select v-model="appState.selectedTrafficInterface" class="form-select">
@@ -998,8 +1148,8 @@ createApp({
             <section class="panel-card">
               <div class="panel-title">接入步骤</div>
               <div class="flow-list">
-                <div class="flow-item"><span>01</span><p>在 .env 中填写 TSHARK_PATH、TRAFFIC_CAPTURE_INTERFACE、CICFLOWMETER_COMMAND</p></div>
-                <div class="flow-item"><span>02</span><p>系统会定时用 TShark 抓包，PCAP 写入抓包目录</p></div>
+                <div class="flow-item"><span>01</span><p>在 .env 中填写 TRAFFIC_CAPTURE_INTERFACE、CICFLOWMETER_COMMAND</p></div>
+                <div class="flow-item"><span>02</span><p>系统会定时用 Scapy 抓包，PCAP 写入抓包目录</p></div>
                 <div class="flow-item"><span>03</span><p>CICFlowMeter 命令会把 PCAP 转成流量特征 CSV，自动落到输入目录</p></div>
                 <div class="flow-item"><span>04</span><p>系统检测完成后会自动归档 PCAP/CSV，结果进入“检测结果/历史记录/告警”页面</p></div>
               </div>

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS user (
     password VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'user',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) COMMENT='系统用户表';
 
 CREATE TABLE IF NOT EXISTS model_info (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS model_info (
     required_columns TEXT,
     is_active BOOLEAN NOT NULL DEFAULT FALSE,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) COMMENT='模型信息表';
 
 CREATE TABLE IF NOT EXISTS dataset_info (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS dataset_info (
     file_path VARCHAR(255) NOT NULL,
     sample_count INT DEFAULT 0,
     upload_time DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) COMMENT='数据集信息表';
 
 CREATE TABLE IF NOT EXISTS detect_record (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS detect_record (
     attack_count INT DEFAULT 0,
     detect_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_detect_user FOREIGN KEY (user_id) REFERENCES user(id)
-);
+) COMMENT='检测记录表';
 
 CREATE TABLE IF NOT EXISTS attack_result (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS attack_result (
     dst_ip VARCHAR(50),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_attack_record FOREIGN KEY (record_id) REFERENCES detect_record(id)
-);
+) COMMENT='攻击结果表';
 
 CREATE TABLE IF NOT EXISTS alarm_log (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS alarm_log (
     status VARCHAR(20) DEFAULT 'unprocessed',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_alarm_record FOREIGN KEY (record_id) REFERENCES detect_record(id)
-);
+) COMMENT='告警日志表';
 
 CREATE TABLE IF NOT EXISTS operation_log (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS operation_log (
     action VARCHAR(100) NOT NULL,
     detail VARCHAR(255),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+) COMMENT='操作日志表';
 
 CREATE TABLE IF NOT EXISTS detection_task (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS detection_task (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_task_user FOREIGN KEY (user_id) REFERENCES user(id),
     CONSTRAINT fk_task_record FOREIGN KEY (record_id) REFERENCES detect_record(id)
-);
+) COMMENT='检测任务表';
 
 INSERT INTO user (username, password, role)
 SELECT 'admin', 'admin123', 'admin'

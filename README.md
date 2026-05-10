@@ -31,8 +31,10 @@ model/
 
 - Python 3.10+
 - MySQL 8.x
-- Java 8+（用于运行 CICFlowMeter）
-- Windows 抓包驱动（通常是 `Npcap`，Scapy 抓包依赖它）
+- Java 11+
+- Windows 抓包驱动（通常是 `Npcap`）
+- `CICFlowMeter.jar`
+- 与当前 `CICFlowMeter` 兼容的 `jnetpcap.dll`
 
 ## Python Dependencies
 
@@ -89,13 +91,20 @@ AUTO_START_TRAFFIC_MONITOR=false
 TRAFFIC_CAPTURE_INTERFACE=1
 TRAFFIC_CAPTURE_DURATION=15
 TRAFFIC_CAPTURE_FILTER=tcp port 5000
-CICFLOWMETER_COMMAND=java -jar C:\tools\CICFlowMeter\CICFlowMeter.jar "{pcap}" "{output_dir}"
+CICFLOWMETER_COMMAND=java -Djava.library.path=C:\tools\CICFlowMeter\native -cp C:\tools\CICFlowMeter\CICFlowMeter.jar cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"
 
 MODEL_INPUT_SIZE=32
 PREDICT_CHUNK_SIZE=5000
 INFERENCE_BATCH_SIZE=1024
 DB_BATCH_SIZE=2000
 ```
+
+说明：
+
+- `CICFLOWMETER_COMMAND` 不再使用 `java -jar ...`
+- 当前这只 `CICFlowMeter.jar` 的默认入口会启动 GUI
+- 后端自动化应改用命令行入口 `cic.cs.unb.ca.ifm.Cmd`
+- `-Djava.library.path=...` 指向放置 `jnetpcap.dll` 的目录
 
 ### 4. Initialize database
 
@@ -143,7 +152,7 @@ http://127.0.0.1:5000
 当前代码里的自动流量监测链路是：
 
 ```text
-Scapy -> PCAP/PCAPNG -> CICFlowMeter -> CSV -> run_detection()
+Scapy -> PCAP/PCAPNG -> CICFlowMeter CLI -> CSV -> run_detection()
 ```
 
 说明：
@@ -158,7 +167,25 @@ Scapy -> PCAP/PCAPNG -> CICFlowMeter -> CSV -> run_detection()
 2. 系统具备可用抓包驱动（Windows 下一般是 `Npcap`）
 3. 正确设置 `TRAFFIC_CAPTURE_INTERFACE`
 4. 正确设置 `CICFLOWMETER_COMMAND`
-5. 本机能正常运行 `java -jar ...CICFlowMeter.jar`
+5. 本机能正常运行 `java -cp ... cic.cs.unb.ca.ifm.Cmd`
+6. `jnetpcap.dll` 已放到 `java.library.path` 指向的目录中
+
+## CICFlowMeter Notes
+
+当前本地验证结果：
+
+- `java -jar CICFlowMeter.jar` 会启动 GUI，不适合后端自动调用
+- `java -cp CICFlowMeter.jar cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"` 才是正确的 CLI 入口
+- 如果缺少 `jnetpcap.dll`，会报 `UnsatisfiedLinkError`
+
+建议目录结构：
+
+```text
+C:\tools\CICFlowMeter\
+├─ CICFlowMeter.jar
+└─ native\
+   └─ jnetpcap.dll
+```
 
 ## Important Files
 
@@ -201,12 +228,14 @@ Scapy -> PCAP/PCAPNG -> CICFlowMeter -> CSV -> run_detection()
 - `scapy` 是否已安装
 - 抓包驱动是否可用
 - `TRAFFIC_CAPTURE_INTERFACE` 是否对应有效网卡
-- `CICFLOWMETER_COMMAND` 是否能单独运行成功
+- `CICFLOWMETER_COMMAND` 是否配置为 `Cmd` 命令行入口
 
-### 4. CICFlowMeter did not produce CSV
+### 4. CICFlowMeter CLI failed
 
 检查：
 
 - `java` 是否在系统路径中
 - `CICFlowMeter.jar` 路径是否正确
-- 该版本 CICFlowMeter 是否支持当前命令行调用方式
+- 是否使用了 `cic.cs.unb.ca.ifm.Cmd`
+- `jnetpcap.dll` 是否存在
+- `-Djava.library.path` 是否指向 `jnetpcap.dll` 所在目录
