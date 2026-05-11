@@ -291,6 +291,13 @@ def serialize_server_access() -> dict:
     }
 
 
+def build_traffic_monitor_payload(app):
+    active_model = get_active_model()
+    status = traffic_monitor_service.status(app)
+    status["active_model"] = serialize_model(active_model) if active_model else None
+    return status
+
+
 def _run_detection_task(app, task_id: int, user_id: int, username: str):
     with app.app_context():
         task = DetectionTask.query.get(task_id)
@@ -688,10 +695,7 @@ def models():
 @api_bp.get("/traffic-monitor")
 @admin_required
 def traffic_monitor_status():
-    active_model = get_active_model()
-    status = traffic_monitor_service.status(current_app._get_current_object())
-    status["active_model"] = serialize_model(active_model) if active_model else None
-    return jsonify({"ok": True, "data": status})
+    return jsonify({"ok": True, "data": build_traffic_monitor_payload(current_app._get_current_object())})
 
 
 @api_bp.get("/traffic-monitor/interfaces")
@@ -708,30 +712,44 @@ def update_traffic_monitor_config():
     capture_interface = str(payload.get("capture_interface", "")).strip()
     if not capture_interface:
         return json_error("Capture interface is required.")
-    status = traffic_monitor_service.update_settings(current_app._get_current_object(), capture_interface)
-    active_model = get_active_model()
-    status["active_model"] = serialize_model(active_model) if active_model else None
+    app = current_app._get_current_object()
+    status = traffic_monitor_service.update_settings(app, capture_interface)
+    status["active_model"] = build_traffic_monitor_payload(app)["active_model"]
     return jsonify({"ok": True, "data": status})
 
 
 @api_bp.post("/traffic-monitor/start")
 @admin_required
 def start_traffic_monitor():
-    started = traffic_monitor_service.start(current_app._get_current_object())
-    status = traffic_monitor_service.status(current_app._get_current_object())
-    active_model = get_active_model()
-    status["active_model"] = serialize_model(active_model) if active_model else None
-    return jsonify({"ok": True, "started": started, "data": status})
+    app = current_app._get_current_object()
+    started = traffic_monitor_service.start(app)
+    return jsonify({"ok": True, "started": started, "data": build_traffic_monitor_payload(app)})
 
 
 @api_bp.post("/traffic-monitor/stop")
 @admin_required
 def stop_traffic_monitor():
+    app = current_app._get_current_object()
     stopped = traffic_monitor_service.stop()
-    status = traffic_monitor_service.status(current_app._get_current_object())
-    active_model = get_active_model()
-    status["active_model"] = serialize_model(active_model) if active_model else None
-    return jsonify({"ok": True, "stopped": stopped, "data": status})
+    return jsonify({"ok": True, "stopped": stopped, "data": build_traffic_monitor_payload(app)})
+
+
+@api_bp.post("/traffic-monitor/test-extract")
+@admin_required
+def traffic_monitor_test_extract():
+    payload = request.get_json(silent=True) or {}
+    pcap_name = str(payload.get("pcap_name", "")).strip()
+    if not pcap_name:
+        return json_error("PCAP file name is required.")
+
+    result = traffic_monitor_service.test_extract(current_app._get_current_object(), pcap_name)
+    return jsonify(
+        {
+            "ok": True,
+            "data": build_traffic_monitor_payload(current_app._get_current_object()),
+            "result": result,
+        }
+    )
 
 
 @api_bp.post("/models")

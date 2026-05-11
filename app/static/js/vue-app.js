@@ -48,6 +48,8 @@ createApp({
       activeModelId: null,
       selectedModelId: null,
       selectedTrafficInterface: "",
+      trafficTestPcapName: "",
+      testingTrafficExtract: false,
       users: [],
       activeTask: null,
       message: "",
@@ -365,6 +367,9 @@ createApp({
       const data = await api("/api/traffic-monitor");
       appState.trafficMonitor = data.data;
       appState.selectedTrafficInterface = data.data.capture_interface || "";
+      if (!appState.trafficTestPcapName) {
+        appState.trafficTestPcapName = data.data.last_generated_pcap || "";
+      }
     }
 
     async function loadTrafficInterfaces() {
@@ -500,6 +505,32 @@ createApp({
         notify("网站流量监测已停止。");
       } catch (error) {
         notify(error.message, "danger");
+      }
+    }
+
+    async function testTrafficExtract() {
+      try {
+        if (!appState.trafficTestPcapName.trim()) {
+          notify("请先输入一个 pcap 文件名。", "danger");
+          return;
+        }
+        appState.testingTrafficExtract = true;
+        const data = await api("/api/traffic-monitor/test-extract", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pcap_name: appState.trafficTestPcapName.trim() }),
+        });
+        appState.trafficMonitor = data.data;
+        const result = data.result;
+        if (result?.ok) {
+          notify(result.has_data_rows ? "PCAP 特征提取成功。" : "PCAP 转出了 CSV，但没有有效数据行。");
+        } else {
+          notify(result?.output_summary || "PCAP 特征提取失败。", "danger");
+        }
+      } catch (error) {
+        notify(error.message, "danger");
+      } finally {
+        appState.testingTrafficExtract = false;
       }
     }
 
@@ -740,6 +771,7 @@ createApp({
       saveTrafficInterface,
       startTrafficMonitor,
       stopTrafficMonitor,
+      testTrafficExtract,
       loadRecordDetail,
       createUser,
       beginEditUser,
@@ -1107,14 +1139,20 @@ createApp({
             </section>
             <section class="stats-grid">
               <article class="stat-card"><p>Scapy</p><h3>{{ appState.trafficMonitor.tshark_ready ? '已就绪' : '未配置' }}</h3><span>负责抓包</span></article>
-              <article class="stat-card"><p>CICFlowMeter</p><h3>{{ appState.trafficMonitor.cicflowmeter_ready ? '已就绪' : '未配置' }}</h3><span>负责生成流量特征 CSV</span></article>
+              <article class="stat-card"><p>Python cicflowmeter 提取器</p><h3>{{ appState.trafficMonitor.cicflowmeter_ready ? '已就绪' : '未配置' }}</h3><span>负责从 PCAP 生成流量特征 CSV</span></article>
               <article class="stat-card"><p>网卡接口</p><h3>{{ appState.trafficMonitor.capture_interface || '未填写' }}</h3><span>Scapy capture interface</span></article>
               <article class="stat-card"><p>当前模型</p><h3>{{ appState.trafficMonitor.active_model ? appState.trafficMonitor.active_model.model_name : '未配置' }}</h3><span>巡检会使用当前启用模型</span></article>
+            </section>
+            <section class="stats-grid">
+              <article class="stat-card"><p>抓包结果</p><h3>{{ appState.trafficMonitor.last_capture_status || 'idle' }}</h3><span>{{ appState.trafficMonitor.last_capture_error || (appState.trafficMonitor.last_generated_pcap || '最近还没有新的 pcap') }}</span></article>
+              <article class="stat-card"><p>提取结果</p><h3>{{ appState.trafficMonitor.last_extract_status || 'idle' }}</h3><span>{{ appState.trafficMonitor.last_extract_error || (appState.trafficMonitor.last_generated_csv || '最近还没有新的 csv') }}</span></article>
+              <article class="stat-card"><p>最近抓包文件</p><h3>{{ appState.trafficMonitor.last_generated_pcap || '暂无' }}</h3><span>{{ appState.trafficMonitor.last_capture_at || '等待新抓包' }}</span></article>
+              <article class="stat-card"><p>最近提取摘要</p><h3>{{ appState.trafficMonitor.last_generated_csv || '暂无' }}</h3><span>{{ appState.trafficMonitor.last_extract_output || '等待新提取' }}</span></article>
             </section>
             <section class="panel-grid user-layout">
               <article class="panel-card">
                 <div class="panel-title">控制台</div>
-                <p class="upload-note">配置好 Scapy 与 CICFlowMeter 后，系统会自动抓网站流量、生成特征 CSV、并调用当前模型送检。</p>
+                <p class="upload-note">配置好 Scapy 与 Python cicflowmeter 提取器后，系统会自动抓网站流量、生成特征 CSV、并调用当前模型送检。</p>
                 <div class="mb-3">
                   <label class="form-label">抓包网卡</label>
                   <select v-model="appState.selectedTrafficInterface" class="form-select">
@@ -1131,6 +1169,22 @@ createApp({
                   <button class="btn btn-outline-secondary" @click="stopTrafficMonitor" :disabled="!appState.trafficMonitor.running">停止监测</button>
                   <button class="btn btn-outline-primary" @click="loadTrafficMonitor">刷新状态</button>
                 </div>
+                <div class="mb-3 mt-3">
+                  <label class="form-label">单独测试 PCAP</label>
+                  <input v-model="appState.trafficTestPcapName" class="form-control" placeholder="例如 traffic_20260510110243.pcap">
+                </div>
+                <div class="table-actions">
+                  <button class="btn btn-outline-primary" @click="appState.trafficTestPcapName = appState.trafficMonitor.last_generated_pcap || appState.trafficTestPcapName">使用最近抓包</button>
+                  <button class="btn btn-outline-success" @click="testTrafficExtract" :disabled="appState.testingTrafficExtract || !appState.trafficTestPcapName">测试提取</button>
+                </div>
+                <p class="upload-note"><strong>最近抓包错误：</strong>{{ appState.trafficMonitor.last_capture_error || '无' }}</p>
+                <p class="upload-note"><strong>最近提取错误：</strong>{{ appState.trafficMonitor.last_extract_error || '无' }}</p>
+                <template v-if="appState.trafficMonitor.last_test_result">
+                  <p class="upload-note"><strong>测试 PCAP：</strong>{{ appState.trafficMonitor.last_test_result.pcap_path }}</p>
+                  <p class="upload-note"><strong>测试输出 CSV：</strong>{{ appState.trafficMonitor.last_test_result.csv_path }}</p>
+                  <p class="upload-note"><strong>测试结论：</strong>{{ appState.trafficMonitor.last_test_result.ok ? (appState.trafficMonitor.last_test_result.has_data_rows ? '提取成功且有数据行' : '提取成功但 CSV 只有表头') : '提取失败' }}</p>
+                  <p class="upload-note"><strong>测试摘要：</strong>{{ appState.trafficMonitor.last_test_result.output_summary || '无' }}</p>
+                </template>
               </article>
               <article class="panel-card">
                 <div class="panel-title">目录信息</div>
@@ -1150,7 +1204,7 @@ createApp({
               <div class="flow-list">
                 <div class="flow-item"><span>01</span><p>在 .env 中填写 TRAFFIC_CAPTURE_INTERFACE、CICFLOWMETER_COMMAND</p></div>
                 <div class="flow-item"><span>02</span><p>系统会定时用 Scapy 抓包，PCAP 写入抓包目录</p></div>
-                <div class="flow-item"><span>03</span><p>CICFlowMeter 命令会把 PCAP 转成流量特征 CSV，自动落到输入目录</p></div>
+                <div class="flow-item"><span>03</span><p>Python cicflowmeter 提取器会把 PCAP 转成流量特征 CSV，自动落到输入目录</p></div>
                 <div class="flow-item"><span>04</span><p>系统检测完成后会自动归档 PCAP/CSV，结果进入“检测结果/历史记录/告警”页面</p></div>
               </div>
             </section>

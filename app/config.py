@@ -12,16 +12,6 @@ DEFAULT_MODEL_PATH = (
     if (BASE_DIR / "1D_CNN_BiLSTM_Attn_best.pth").exists()
     else BASE_DIR / "best_hybrid_ids_model.pth"
 )
-DEFAULT_CICFLOWMETER_JAR = Path(r"C:\tools\CICFlowMeter\CICFlowMeter.jar")
-DEFAULT_JNETPCAP_LIBRARY_PATH = Path(r"C:\tools\CICFlowMeter\native")
-
-
-def _default_cicflowmeter_command() -> str:
-    return (
-        f'java -Djava.library.path={DEFAULT_JNETPCAP_LIBRARY_PATH} '
-        f'-cp {DEFAULT_CICFLOWMETER_JAR} '
-        'cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"'
-    )
 
 
 class Config:
@@ -49,14 +39,6 @@ class Config:
     TRAFFIC_CAPTURE_INTERFACE = os.getenv("TRAFFIC_CAPTURE_INTERFACE", "")
     TRAFFIC_CAPTURE_DURATION = int(os.getenv("TRAFFIC_CAPTURE_DURATION", "15"))
     TRAFFIC_CAPTURE_FILTER = os.getenv("TRAFFIC_CAPTURE_FILTER", "")
-    CICFLOWMETER_JAR_PATH = os.getenv("CICFLOWMETER_JAR_PATH", str(DEFAULT_CICFLOWMETER_JAR))
-    JNETPCAP_LIBRARY_PATH = os.getenv("JNETPCAP_LIBRARY_PATH", str(DEFAULT_JNETPCAP_LIBRARY_PATH))
-    CICFLOWMETER_COMMAND = os.getenv(
-        "CICFLOWMETER_COMMAND",
-        f'java -Djava.library.path={JNETPCAP_LIBRARY_PATH} '
-        f'-cp {CICFLOWMETER_JAR_PATH} '
-        'cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"',
-    )
     MODEL_INPUT_SIZE = int(os.getenv("MODEL_INPUT_SIZE", "32"))
     MAX_CONTENT_LENGTH = 512 * 1024 * 1024
     PREDICT_CHUNK_SIZE = int(os.getenv("PREDICT_CHUNK_SIZE", "5000"))
