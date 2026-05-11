@@ -4,8 +4,8 @@
 
 - CSV 流量特征文件检测
 - 模型管理与切换
-- 告警记录与检测历史查看
-- 基于 `Scapy + CICFlowMeter` 的自动流量监测
+- 告警记录与检测历史查询
+- 基于 `Scapy + Python cicflowmeter` 的自动流量监测
 
 ## Project Structure
 
@@ -16,7 +16,7 @@ model/
 │  ├─ services/      # 检测、模型、流量监测核心逻辑
 │  ├─ static/        # 前端静态资源
 │  └─ templates/     # SPA 模板
-├─ artifacts/        # 预处理元数据、评估缓存、监测设置
+├─ artifacts/        # 预处理元数据、评估缓存、监测配置
 ├─ dataset/          # 训练/评估用数据集
 ├─ logs/
 ├─ sample_data/      # 示例流量 CSV
@@ -29,16 +29,21 @@ model/
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.13.x
 - MySQL 8.x
-- Java 11+
-- Windows 抓包驱动（通常是 `Npcap`）
-- `CICFlowMeter.jar`
-- 与当前 `CICFlowMeter` 兼容的 `jnetpcap.dll`
+- Windows 抓包驱动，通常为 `Npcap`
+
+说明：
+
+- 项目当前已经移除 Java `CICFlowMeter.jar + jNetPcap` 依赖
+- 流量特征提取改为 Python 库 `cicflowmeter`
+- 推荐使用仓库里的 `.venv`
 
 ## Python Dependencies
 
-项目当前代码对应的依赖见 [requirements.txt](c:\graduationProject\project\model\requirements.txt:1)：
+项目依赖见 `requirements.txt`。
+
+核心依赖包括：
 
 - Flask
 - Flask-SQLAlchemy
@@ -50,14 +55,24 @@ model/
 - scikit-learn
 - torch
 - scapy
+- cicflowmeter
 
 ## Quick Start
 
 ### 1. Create venv
 
+如果你已经按现在的流程重建过环境，直接激活现有 `.venv` 即可：
+
 ```powershell
 cd c:\graduationProject\project\model
-python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+如果需要从头创建：
+
+```powershell
+cd c:\graduationProject\project\model
+C:\Users\huang\miniconda3\python.exe -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
@@ -78,9 +93,12 @@ Copy-Item .env.example .env
 ```env
 SECRET_KEY=ids-system-secret-key
 DATABASE_URI=mysql+pymysql://root:123456@127.0.0.1:3306/ids_system?charset=utf8mb4
+FLASK_RUN_HOST=0.0.0.0
+FLASK_RUN_PORT=5000
 MODEL_PATH=c:\graduationProject\project\model\1D_CNN_BiLSTM_Attn_best.pth
 DATASET_DIR=c:\graduationProject\project\model\dataset
 ARTIFACT_DIR=c:\graduationProject\project\model\artifacts
+MODEL_INPUT_SIZE=32
 
 TRAFFIC_FLOW_INPUT_DIR=c:\graduationProject\project\model\uploads\traffic_flows\inbox
 TRAFFIC_FLOW_ARCHIVE_DIR=c:\graduationProject\project\model\uploads\traffic_flows\archive
@@ -91,20 +109,15 @@ AUTO_START_TRAFFIC_MONITOR=false
 TRAFFIC_CAPTURE_INTERFACE=1
 TRAFFIC_CAPTURE_DURATION=15
 TRAFFIC_CAPTURE_FILTER=tcp port 5000
-CICFLOWMETER_COMMAND=java -Djava.library.path=C:\tools\CICFlowMeter\native -cp C:\tools\CICFlowMeter\CICFlowMeter.jar cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"
-
-MODEL_INPUT_SIZE=32
-PREDICT_CHUNK_SIZE=5000
-INFERENCE_BATCH_SIZE=1024
-DB_BATCH_SIZE=2000
 ```
 
 说明：
 
-- `CICFLOWMETER_COMMAND` 不再使用 `java -jar ...`
-- 当前这只 `CICFlowMeter.jar` 的默认入口会启动 GUI
-- 后端自动化应改用命令行入口 `cic.cs.unb.ca.ifm.Cmd`
-- `-Djava.library.path=...` 指向放置 `jnetpcap.dll` 的目录
+- `TRAFFIC_MONITOR_INTERVAL=10` 表示每轮监测结束后，等待 10 秒再开始下一轮
+- `TRAFFIC_CAPTURE_DURATION=15` 表示每轮抓包持续 15 秒
+- 所以当前默认节奏是 “抓 15 秒，等 10 秒，再抓下一轮”
+- `TRAFFIC_CAPTURE_INTERFACE` 可以填网卡序号或接口名
+- `TRAFFIC_CAPTURE_FILTER` 是可选的 BPF 过滤条件
 
 ### 4. Initialize database
 
@@ -131,7 +144,7 @@ http://127.0.0.1:5000
 - `admin / admin123`
 - `user / user123`
 
-如果数据库里还没有初始化账号，可以先调用 `POST /api/auth/init-demo`，或者在页面里执行演示初始化。
+如果数据库里还没有初始账号，可以先调用 `POST /api/auth/init-demo`，或者在页面里执行演示初始化。
 
 ## Core Features
 
@@ -149,59 +162,49 @@ http://127.0.0.1:5000
 
 ### Traffic monitoring
 
-当前代码里的自动流量监测链路是：
+当前自动流量监测链路是：
 
 ```text
-Scapy -> PCAP/PCAPNG -> CICFlowMeter CLI -> CSV -> run_detection()
+Scapy -> PCAP -> Python cicflowmeter -> 规范化 CSV -> run_detection()
 ```
 
 说明：
 
 - `Scapy` 负责抓包
-- `CICFlowMeter` 负责把抓包文件转成流量特征 CSV
-- 系统再调用当前启用模型做检测
+- `Python cicflowmeter` 负责把 `pcap` 转成流量特征 CSV
+- 系统会把 Python 提取结果规范化为项目当前模型可接受的 CIC-IDS 风格列头
+- 之后再调用当前启用模型完成检测
 
 要让这部分正常工作，你需要：
 
-1. 安装好 `scapy`
-2. 系统具备可用抓包驱动（Windows 下一般是 `Npcap`）
+1. 安装好 `scapy` 和 `cicflowmeter`
+2. 系统具备可用抓包驱动，Windows 下一般是 `Npcap`
 3. 正确设置 `TRAFFIC_CAPTURE_INTERFACE`
-4. 正确设置 `CICFLOWMETER_COMMAND`
-5. 本机能正常运行 `java -cp ... cic.cs.unb.ca.ifm.Cmd`
-6. `jnetpcap.dll` 已放到 `java.library.path` 指向的目录中
+4. 确认当前环境就是项目的 `.venv`
 
-## CICFlowMeter Notes
+## Traffic Extractor Notes
 
-当前本地验证结果：
+当前实现不再调用 Java CLI，而是直接走 Python 库内部能力：
 
-- `java -jar CICFlowMeter.jar` 会启动 GUI，不适合后端自动调用
-- `java -cp CICFlowMeter.jar cic.cs.unb.ca.ifm.Cmd "{pcap}" "{output_dir}"` 才是正确的 CLI 入口
-- 如果缺少 `jnetpcap.dll`，会报 `UnsatisfiedLinkError`
+- 使用 `scapy.utils.PcapReader` 读取抓到的 `pcap`
+- 使用 `cicflowmeter.flow_session.FlowSession` 生成原始流特征
+- 再由项目代码把列头规范化为模型期望格式
 
-建议目录结构：
+这样做的原因：
 
-```text
-C:\tools\CICFlowMeter\
-├─ CICFlowMeter.jar
-└─ native\
-   └─ jnetpcap.dll
-```
+- 避开旧版 Java `CICFlowMeter` 在自动化场景下的 GUI / native 依赖问题
+- 避开 Python 包自带 CLI 在当前版本下的 `bool.split()` 异常
+- 单个 `pcap` 的问题更容易通过本地测试接口精确定位
 
 ## Important Files
 
-- [app.py](c:\graduationProject\project\model\app.py:1)
-- [app/config.py](c:\graduationProject\project\model\app\config.py:1)
-- [app/routes/api.py](c:\graduationProject\project\model\app\routes\api.py:1)
-- [app/services/data_service.py](c:\graduationProject\project\model\app\services\data_service.py:1)
-- [app/services/model_service.py](c:\graduationProject\project\model\app\services\model_service.py:1)
-- [app/services/traffic_monitor.py](c:\graduationProject\project\model\app\services\traffic_monitor.py:1)
-
-## Notes
-
-- 模型文件默认优先使用 `1D_CNN_BiLSTM_Attn_best.pth`
-- 若不存在，则回退到 `best_hybrid_ids_model.pth`
-- 流量监测依赖当前激活的管理员账号和启用模型
-- `sample_data/demo_traffic.csv` 可用于基础流程验证
+- `app.py`
+- `app/config.py`
+- `app/routes/api.py`
+- `app/services/data_service.py`
+- `app/services/model_service.py`
+- `app/services/traffic_monitor.py`
+- `TRAFFIC_CAPTURE_README.md`
 
 ## Troubleshooting
 
@@ -225,17 +228,24 @@ C:\tools\CICFlowMeter\
 
 检查：
 
+- 当前虚拟环境是否为项目 `.venv`
 - `scapy` 是否已安装
+- `cicflowmeter` 是否已安装
 - 抓包驱动是否可用
 - `TRAFFIC_CAPTURE_INTERFACE` 是否对应有效网卡
-- `CICFLOWMETER_COMMAND` 是否配置为 `Cmd` 命令行入口
 
-### 4. CICFlowMeter CLI failed
+### 4. PCAP captured but CSV not generated
 
 检查：
 
-- `java` 是否在系统路径中
-- `CICFlowMeter.jar` 路径是否正确
-- 是否使用了 `cic.cs.unb.ca.ifm.Cmd`
-- `jnetpcap.dll` 是否存在
-- `-Djava.library.path` 是否指向 `jnetpcap.dll` 所在目录
+- `pcap` 文件里是否真的有包
+- 抓到的流量是否足以组成可计算的 flow
+- 当前环境里的 `cicflowmeter` 是否可导入
+- 可使用 `POST /api/traffic-monitor/test-extract` 单独测试某个 `pcap`
+
+## Notes
+
+- 模型文件默认优先使用 `1D_CNN_BiLSTM_Attn_best.pth`
+- 若不存在，则回退到 `best_hybrid_ids_model.pth`
+- 流量监测依赖当前激活的管理员账号和启用模型
+- `sample_data/demo_traffic.csv` 可用于基础流程验证
