@@ -1,5 +1,7 @@
 .env
 .venv/
+.venv_backup_py311/
+instance/
 __pycache__/
 *.py[cod]
 *.pyo

@@ -36,7 +36,7 @@
     document.body.classList.remove("capabilities-open");
   }
 
-  function renderModelDetails(panel, model, metrics, isActive) {
+  function renderModelDetails(panel, model, dashData, isActive) {
     const requiredColumns = (model.required_columns || [])
       .map((column) => `<li>${column}</li>`)
       .join("");
@@ -56,47 +56,43 @@
       <div class="capability-metric-grid">
         <article class="capability-metric-card">
           <span>Accuracy</span>
-          <strong>${formatPercent(metrics.accuracy ?? model.accuracy)}</strong>
+          <strong>${formatPercent(model.accuracy)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>Precision</span>
-          <strong>${formatScore(metrics.precision ?? model.precision)}</strong>
+          <strong>${formatScore(model.precision)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>Recall</span>
-          <strong>${formatScore(metrics.recall ?? model.recall)}</strong>
+          <strong>${formatScore(model.recall)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>F1-Score</span>
-          <strong>${formatScore(metrics.f1_score ?? model.f1_score)}</strong>
+          <strong>${formatScore(model.f1_score)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>FPR</span>
-          <strong>${formatScore(metrics.fpr ?? model.fpr, 6)}</strong>
+          <strong>${formatScore(model.fpr, 6)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>FNR</span>
-          <strong>${formatScore(metrics.fnr ?? model.fnr, 6)}</strong>
+          <strong>${formatScore(model.fnr, 6)}</strong>
         </article>
         <article class="capability-metric-card">
           <span>Latency</span>
-          <strong>${formatLatency(metrics.inference_latency_ms ?? model.inference_latency_ms, 3)} ms</strong>
-        </article>
-        <article class="capability-metric-card">
-          <span>Test Samples</span>
-          <strong>${metrics.test_samples || 0}</strong>
+          <strong>${formatLatency(model.inference_latency_ms, 3)} ms</strong>
         </article>
         <article class="capability-metric-card">
           <span>${recordLabel}</span>
-          <strong>${metrics.total_samples || 0}</strong>
+          <strong>${dashData.total_samples || 0}</strong>
         </article>
         <article class="capability-metric-card">
           <span>${attackLabel}</span>
-          <strong>${metrics.total_attacks || 0}</strong>
+          <strong>${dashData.total_attacks || 0}</strong>
         </article>
         <article class="capability-metric-card">
           <span>${benignLabel}</span>
-          <strong>${metrics.total_normals || 0}</strong>
+          <strong>${dashData.total_normals || 0}</strong>
         </article>
         <article class="capability-metric-card">
           <span>Required Columns</span>
@@ -127,36 +123,39 @@
     panel.querySelector("[data-role='detail']").innerHTML = "<p class='upload-note'>正在加载模型能力...</p>";
 
     try {
-      const [{ items, active_model_id: activeModelId }, me] = await Promise.all([
+      const [{ items, active_model_id: activeModelId }, me, dashResponse] = await Promise.all([
         api("/api/models"),
         api("/api/auth/me"),
+        api("/api/dashboard"),
       ]);
       const isAdmin = Boolean(me.user && me.user.role === "admin");
       panel.dataset.isAdmin = isAdmin ? "true" : "false";
+      const dashData = dashResponse.data || {};
 
       const select = panel.querySelector("select");
       select.innerHTML = items
         .map((item) => `<option value="${item.id}" ${item.id === activeModelId ? "selected" : ""}>${item.model_name}</option>`)
         .join("");
 
-      async function loadSelectedModel() {
+      function loadSelectedModel() {
         const selectedId = Number(select.value);
         const model = items.find((item) => item.id === selectedId) || items[0];
         if (!model) {
           panel.querySelector("[data-role='detail']").innerHTML = "<p class='upload-note'>当前没有可展示的模型。</p>";
           return;
         }
-        const metricsResponse = await api(`/api/metrics?model_id=${model.id}`);
-        renderModelDetails(panel, model, metricsResponse.data || {}, model.id === activeModelId);
+        renderModelDetails(panel, model, dashData, model.id === activeModelId);
       }
 
       select.onchange = () => {
-        loadSelectedModel().catch((error) => {
+        try {
+          loadSelectedModel();
+        } catch (error) {
           panel.querySelector("[data-role='detail']").innerHTML = `<p class='upload-note text-danger'>${error.message}</p>`;
-        });
+        }
       };
 
-      await loadSelectedModel();
+      loadSelectedModel();
     } catch (error) {
       panel.querySelector("[data-role='detail']").innerHTML = `<p class='upload-note text-danger'>${error.message}</p>`;
     }

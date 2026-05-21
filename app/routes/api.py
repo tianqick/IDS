@@ -160,6 +160,7 @@ def current_user_filters(query, model):
 
 
 def serialize_record(record: DetectRecord):
+    alarm_count = AlarmLog.query.filter_by(record_id=record.id).count()
     return {
         "id": record.id,
         "user_id": record.user_id,
@@ -171,6 +172,9 @@ def serialize_record(record: DetectRecord):
         "normal_count": record.normal_count,
         "attack_count": record.attack_count,
         "detect_time": record.detect_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "alarm_count": alarm_count,
+        "operator": record.user.username if record.user else f"user#{record.user_id}",
+        "status": "存在告警" if alarm_count else "正常完成",
     }
 
 
@@ -204,7 +208,7 @@ def serialize_model(item: ModelInfo):
         "model_name": item.model_name,
         "model_path": item.model_path,
         "model_type": item.model_type,
-        "accuracy": item.accuracy,
+        "accuracy": item.accuracy or 0.0,
         "precision": item.precision or 0.0,
         "recall": item.recall or 0.0,
         "f1_score": item.f1_score or 0.0,
@@ -537,33 +541,6 @@ def delete_record(record_id: int):
     return jsonify({"ok": True})
 
 
-@api_bp.get("/history")
-@login_required
-def history():
-    records = current_user_filters(
-        DetectRecord.query.order_by(DetectRecord.detect_time.desc()),
-        DetectRecord,
-    ).all()
-
-    items = []
-    for record in records:
-        alarm_count = AlarmLog.query.filter_by(record_id=record.id).count()
-        items.append(
-            {
-                "id": record.id,
-                "source_file": record.source_file,
-                "detect_time": record.detect_time.strftime("%Y-%m-%d %H:%M:%S"),
-                "sample_count": record.sample_count,
-                "normal_count": record.normal_count,
-                "attack_count": record.attack_count,
-                "alarm_count": alarm_count,
-                "operator": record.user.username if record.user else f"user#{record.user_id}",
-                "status": "存在告警" if alarm_count else "正常完成",
-            }
-        )
-    return jsonify({"ok": True, "items": items})
-
-
 @api_bp.get("/alarms")
 @admin_required
 def alarms():
@@ -622,60 +599,6 @@ def update_alarm(alarm_id: int):
     )
     db.session.commit()
     return jsonify({"ok": True, "alarm": serialize_alarm(alarm)})
-
-
-@api_bp.get("/metrics")
-@login_required
-def metrics():
-    totals = current_user_filters(DetectRecord.query, DetectRecord).with_entities(
-        func.coalesce(func.sum(DetectRecord.sample_count), 0),
-        func.coalesce(func.sum(DetectRecord.attack_count), 0),
-        func.coalesce(func.sum(DetectRecord.normal_count), 0),
-    ).first()
-    total_samples, total_attacks, total_normals = [int(value or 0) for value in totals]
-    model_id = request.args.get("model_id", type=int)
-
-    model = None
-    if model_id is not None:
-        model = ModelInfo.query.get(model_id)
-        if not model:
-            return json_error("Model not found.", 404)
-    if model is None:
-        model = get_active_model()
-
-    fallback_data = {
-        "id": None,
-        "model_name": "",
-        "model_path": "",
-        "model_type": "",
-        "accuracy": 0.0,
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1_score": 0.0,
-        "fpr": 0.0,
-        "fnr": 0.0,
-        "inference_latency_ms": 0.0,
-        "description": "",
-        "dataset_format": "",
-        "required_columns": [],
-        "is_active": False,
-        "create_time": "",
-    }
-
-    return jsonify(
-        {
-            "ok": True,
-            "data": {
-                "total_samples": total_samples,
-                "total_attacks": total_attacks,
-                "total_normals": total_normals,
-                "test_samples": 0,
-                "labels": [],
-                "confusion_matrix": [],
-                **(serialize_model(model) if model else fallback_data),
-            },
-        }
-    )
 
 
 @api_bp.get("/models")

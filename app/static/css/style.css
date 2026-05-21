@@ -481,51 +481,6 @@ a {
     gap: 12px;
 }
 
-.history-timeline {
-    display: grid;
-    gap: 16px;
-}
-
-.history-entry {
-    display: grid;
-    grid-template-columns: 24px 1fr;
-    gap: 16px;
-}
-
-.history-marker {
-    width: 14px;
-    height: 14px;
-    margin-top: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 6px rgba(180, 83, 9, 0.12);
-}
-
-.history-content {
-    padding: 18px;
-    border-radius: 20px;
-    border: 1px solid var(--line);
-    background: rgba(255, 255, 255, 0.62);
-}
-
-.history-topline {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: flex-start;
-}
-
-.history-file {
-    display: inline-block;
-    margin-left: 10px;
-    color: var(--muted);
-}
-
-.history-meta {
-    margin: 10px 0;
-    color: var(--muted);
-    line-height: 1.6;
-}
 
 .alarm-row {
     display: flex;

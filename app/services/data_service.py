@@ -170,11 +170,23 @@ def build_dashboard_stats(current_user_id: Optional[int] = None, role: str = "ad
         trend.setdefault(day_label, 0)
         trend[day_label] += record.attack_count
 
+    total_samples, total_attacks, total_normals = 0, 0, 0
+    if record_count > 0:
+        totals = records_query.with_entities(
+            func.coalesce(func.sum(DetectRecord.sample_count), 0),
+            func.coalesce(func.sum(DetectRecord.attack_count), 0),
+            func.coalesce(func.sum(DetectRecord.normal_count), 0),
+        ).first()
+        total_samples, total_attacks, total_normals = [int(value or 0) for value in totals]
+
     return {
         "user_count": User.query.count() if role == "admin" else 1,
         "dataset_count": DatasetInfo.query.count(),
         "record_count": record_count,
         "alarm_count": alarm_count if role != "admin" else AlarmLog.query.count(),
+        "total_samples": total_samples,
+        "total_attacks": total_attacks,
+        "total_normals": total_normals,
         "attack_distribution": attack_distribution,
         "trend_labels": list(reversed(list(trend.keys()))),
         "trend_values": list(reversed(list(trend.values()))),
