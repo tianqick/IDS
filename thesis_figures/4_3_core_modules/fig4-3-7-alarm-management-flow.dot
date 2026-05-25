@@ -1,0 +1,33 @@
+digraph fig4_3_7_alarm_management_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-7 告警管理流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="管理员进入告警中心", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  request [label="GET /api/alarms\npage/page_size/status", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  query [label="JOIN alarm_log 与 detect_record\n过滤traffic_%在线监测记录", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  filter [label="按状态筛选\nunprocessed/processed/ignored", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  page [label="分页返回告警列表", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  render [label="前端展示告警内容\n级别/状态/时间", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  action [label="管理员操作？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  detail [label="跳转关联检测详情", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  patch [label="PATCH /api/alarms/<id>\n提交新状态", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  valid [label="状态值合法？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  error [label="返回400错误提示", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  update [label="更新alarm_log.status\n写入operation_log", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  end [label="告警处理完成", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> request;
+  request -> query;
+  query -> filter;
+  filter -> page;
+  page -> render;
+  render -> action;
+  action -> detail [label="查看详情"];
+  action -> patch [label="更新状态"];
+  action -> end [label="仅浏览"];
+  patch -> valid;
+  valid -> error [label="否"];
+  valid -> update [label="是"];
+  error -> render;
+  update -> request [label="刷新列表"];
+  detail -> end;
+}

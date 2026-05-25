@@ -1,0 +1,36 @@
+digraph fig4_3_6_results_history_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-6 检测结果与历史记录流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="进入检测结果页面", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  list [label="GET /api/records\n获取检测记录列表", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  scope [label="当前角色？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  all [label="管理员查看全部记录", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  self [label="普通用户仅查看\n本人记录", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  records [label="查询detect_record\n按detect_time降序", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  count [label="统计关联alarm_log数量\n生成记录状态", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  render [label="前端表格展示\n文件/样本/攻击/时间/操作者", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  search [label="客户端关键词过滤\n文件名/编号/时间/状态", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  detail_req [label="GET /api/records/<id>\n请求详情", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  detail_db [label="查询DetectRecord\n和AttackResult明细", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  detail [label="展示统计卡片\n和攻击结果列表", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  delete [label="管理员删除记录？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  cascade [label="删除attack_result/alarm_log\n置空detection_task.record_id", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  end [label="结果查看完成", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> list;
+  list -> scope;
+  scope -> all [label="admin"];
+  scope -> self [label="user"];
+  all -> records;
+  self -> records;
+  records -> count;
+  count -> render;
+  render -> search;
+  search -> detail_req [label="选择记录"];
+  detail_req -> detail_db;
+  detail_db -> detail;
+  detail -> delete;
+  delete -> cascade [label="是"];
+  delete -> end [label="否"];
+  cascade -> list [label="刷新列表"];
+}

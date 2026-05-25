@@ -1,0 +1,16 @@
+digraph fig4_3_bw_3_dashboard_stats {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.28", ranksep="0.32", dpi="160", bgcolor="white", style="filled", fillcolor="white", pad="0.08", margin="0.04"];
+  node [fontname="SimSun", fontsize="12", margin="0.10,0.07", fontcolor="#222222"];
+  edge [fontname="SimSun", fontsize="11", color="#222222", fontcolor="#222222", arrowhead="normal", arrowsize="0.7", penwidth="1.1"];
+  start [label="进入首页", shape="box", style="rounded", color="#222222", penwidth="1.4"];
+  scope [label="确定统计范围", shape="diamond", style="", color="#222222", penwidth="1.2"];
+  query [label="汇总业务数据", shape="box", style="", color="#222222", penwidth="1.2"];
+  stats [label="生成统计结果", shape="box", style="", color="#222222", penwidth="1.2"];
+  chart [label="渲染图表与列表", shape="box", style="", color="#222222", penwidth="1.2"];
+  end [label="展示完成", shape="box", style="rounded", color="#222222", penwidth="1.4"];
+  start -> scope;
+  scope -> query [xlabel="管理员/普通用户"];
+  query -> stats;
+  stats -> chart;
+  chart -> end;
+}

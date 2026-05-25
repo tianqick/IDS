@@ -1,0 +1,30 @@
+digraph fig4_3_10_traffic_config_start_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-10 流量监测配置与启停流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="管理员进入网站流量页面", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  status [label="GET /api/traffic-monitor\n获取监测状态", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  ready [label="检查scapy/cicflowmeter\n和网卡配置", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  interfaces [label="GET /api/traffic-monitor/interfaces\n发现可用网卡", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  select [label="选择抓包网卡", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  save [label="PATCH /api/traffic-monitor/config\n保存capture_interface", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  settings [label="写入artifacts/\ntraffic_monitor_settings.json", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  pipeline [label="pipeline_ready？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  start_api [label="POST /api/traffic-monitor/start\n启动后台监测线程", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  timer [label="前端每3秒轮询状态", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  stop [label="POST /api/traffic-monitor/stop\n设置stop_event", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  end [label="配置与启停结束", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> status;
+  status -> ready;
+  ready -> interfaces;
+  interfaces -> select;
+  select -> save;
+  save -> settings;
+  settings -> pipeline;
+  pipeline -> start_api [label="是"];
+  pipeline -> status [label="否，继续配置"];
+  start_api -> timer;
+  timer -> stop [label="管理员停止"];
+  timer -> status [label="持续刷新"];
+  stop -> end;
+}

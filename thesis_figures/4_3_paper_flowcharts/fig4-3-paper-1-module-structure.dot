@@ -1,0 +1,28 @@
+digraph fig4_3_paper_1_module_structure {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35", dpi="160", bgcolor="white", label="图4.3-1 核心功能模块划分图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  sys [label="入侵检测系统", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  common [label="通用支撑", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  detect [label="检测业务", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  admin [label="系统管理", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  auth [label="登录认证", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  dashboard [label="首页统计", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  upload [label="上传检测", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  result [label="结果历史", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  alarm [label="告警管理", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  traffic [label="流量监测", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  model [label="模型管理", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  user [label="用户管理", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  sys -> common;
+  sys -> detect;
+  sys -> admin;
+  common -> auth;
+  common -> dashboard;
+  detect -> upload;
+  detect -> result;
+  detect -> alarm;
+  detect -> traffic;
+  admin -> model;
+  admin -> user;
+}

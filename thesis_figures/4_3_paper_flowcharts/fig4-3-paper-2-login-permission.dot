@@ -1,0 +1,22 @@
+digraph fig4_3_paper_2_login_permission {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35", dpi="160", bgcolor="white", label="图4.3-2 登录认证与权限控制流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="访问系统", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  session [label="检查会话", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  login [label="登录认证", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  role [label="识别角色", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  menu [label="加载功能菜单", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  guard [label="接口权限校验", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  biz [label="执行业务操作", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  end [label="结束", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> session;
+  session -> role [label="有效"];
+  session -> login [label="无效"];
+  login -> role [label="认证通过"];
+  role -> menu [label="admin/user"];
+  menu -> guard;
+  guard -> biz [label="通过"];
+  guard -> login [label="拒绝"];
+  biz -> end;
+}

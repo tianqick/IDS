@@ -1,0 +1,38 @@
+digraph fig4_3_11_traffic_capture_detect_cycle {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-11 在线流量抓包、提取与检测循环流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="监测线程_run_loop", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  dirs [label="创建inbox/archive\npcap/pcap_archive目录", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  capture [label="Scapy sniff()\n按网卡/时长/BPF过滤抓包", shape="box", style="rounded,filled", fillcolor="#FDEDEC", color="#C0392B", penwidth="1.2"];
+  pcap [label="生成traffic_时间戳.pcap", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  extract [label="PcapReader + FlowSession\n提取原始流特征CSV", shape="box", style="rounded,filled", fillcolor="#FDEDEC", color="#C0392B", penwidth="1.2"];
+  normalize [label="字段映射规范化\n补齐CIC-IDS特征列\n生成Flow ID", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  has_rows [label="CSV存在有效flow？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  empty [label="归档空CSV\nempty_feature_count++", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  admin [label="选择首个管理员账号\n作为自动检测操作者", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  active [label="获取当前启用模型", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  detect [label="调用run_detection()\n执行模型推理", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  save [label="写入DetectRecord\nAttackResult\nAlarmLog", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  archive [label="归档PCAP和CSV\n更新processed_count", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  wait [label="等待TRAFFIC_MONITOR_INTERVAL\n默认10秒", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  stop [label="stop_event已设置？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  end [label="线程安全退出", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> dirs;
+  dirs -> capture;
+  capture -> pcap;
+  pcap -> extract;
+  extract -> normalize;
+  normalize -> has_rows;
+  has_rows -> empty [label="否"];
+  has_rows -> admin [label="是"];
+  admin -> active;
+  active -> detect;
+  detect -> save;
+  save -> archive;
+  empty -> archive;
+  archive -> wait;
+  wait -> stop;
+  stop -> capture [label="否，下一轮"];
+  stop -> end [label="是"];
+}

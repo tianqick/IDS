@@ -1,0 +1,32 @@
+digraph fig4_3_3_dashboard_stats_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-3 系统首页统计展示流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="用户进入系统首页", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  request [label="GET /api/dashboard\n请求统计数据", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  auth [label="会话校验通过？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  scope [label="根据role确定\n数据统计范围", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  admin [label="管理员：全局统计", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  user [label="普通用户：按user_id过滤", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  record [label="detect_record\n记录数/样本数/趋势", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  result [label="attack_result\n类型分布统计", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  alarm [label="alarm_log\n告警数量与最近告警", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  dataset [label="dataset_info / user\n数据集数与用户数", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  json [label="组装JSON响应", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  render [label="前端渲染\n统计卡片 + ECharts图表\n+ 最近记录列表", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  end [label="首页展示完成", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> request;
+  request -> auth;
+  auth -> scope [label="是"];
+  auth -> start [label="否"];
+  scope -> admin [label="admin"];
+  scope -> user [label="user"];
+  admin -> record;
+  user -> record;
+  record -> result;
+  result -> alarm;
+  alarm -> dataset;
+  dataset -> json;
+  json -> render;
+  render -> end;
+}

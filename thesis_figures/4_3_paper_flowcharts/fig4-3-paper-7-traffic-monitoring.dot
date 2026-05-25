@@ -1,0 +1,23 @@
+digraph fig4_3_paper_7_traffic_monitoring {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.25", ranksep="0.35", dpi="160", bgcolor="white", label="图4.3-7 实时流量监测流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="配置网卡参数", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  run [label="启动监测线程", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  pcap [label="抓取PCAP", shape="box", style="rounded,filled", fillcolor="#FDEDEC", color="#C0392B", penwidth="1.2"];
+  csv [label="提取流量特征", shape="box", style="rounded,filled", fillcolor="#FDEDEC", color="#C0392B", penwidth="1.2"];
+  norm [label="规范化字段", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  detect [label="调用模型检测", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  archive [label="保存结果并归档", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  loop [label="继续监测？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  end [label="停止监测", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> run;
+  run -> pcap;
+  pcap -> csv;
+  csv -> norm;
+  norm -> detect;
+  detect -> archive;
+  archive -> loop;
+  loop -> pcap [label="是"];
+  loop -> end [label="否"];
+}

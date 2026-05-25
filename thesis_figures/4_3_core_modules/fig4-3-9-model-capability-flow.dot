@@ -1,0 +1,27 @@
+digraph fig4_3_9_model_capability_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-9 模型能力展示流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="用户点击“模型能力”", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  parallel [label="并行请求\n/api/models\n/api/auth/me\n/api/dashboard", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  models [label="获取模型指标\nAccuracy/Precision/Recall/F1\nFPR/FNR/Latency", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  me [label="获取当前用户角色", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  dash [label="获取历史检测统计\n样本/攻击/正常数量", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  select [label="根据active_model_id\n选中当前模型", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  render [label="展示模型能力面板\n数据格式说明\n必需字段列表\n历史样本统计", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  change [label="切换选择模型？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  rerender [label="重新渲染所选模型\n能力信息", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  end [label="关闭面板", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> parallel;
+  parallel -> models;
+  parallel -> me;
+  parallel -> dash;
+  models -> select;
+  me -> select;
+  dash -> select;
+  select -> render;
+  render -> change;
+  change -> rerender [label="是"];
+  rerender -> change;
+  change -> end [label="否"];
+}

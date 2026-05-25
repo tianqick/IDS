@@ -1,0 +1,36 @@
+digraph fig4_3_4_upload_task_submission_flow {
+  graph [charset="UTF-8", rankdir="TB", splines="ortho", nodesep="0.5", ranksep="0.7", dpi="160", bgcolor="white", label="图4.3-4 上传检测任务提交流程图", labelloc="t", fontsize="18", fontname="Microsoft YaHei"];
+  node [fontname="Microsoft YaHei", fontsize="11", margin="0.12,0.08"];
+  edge [fontname="Microsoft YaHei", fontsize="10", color="#566573", arrowhead="vee"];
+  start [label="进入上传检测页面", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  models [label="GET /api/models\n加载模型列表", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  select [label="选择检测模型\n选择CSV文件", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  check [label="文件为.csv？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  reject [label="提示仅支持CSV", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  submit [label="POST /api/detect/upload\n提交dataset和model_id", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  save [label="save_dataset()\n时间戳重命名并保存", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  dataset [label="写入dataset_info\n统计CSV行数", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  task [label="创建detection_task\nstatus=queued", shape="cylinder", style="filled", fillcolor="#F4ECF7", color="#7D3C98", penwidth="1.2"];
+  thread [label="启动后台线程\n_run_detection_task()", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  return [label="立即返回task_id\n前端不阻塞", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  poll [label="GET /api/tasks/<id>\n定时轮询进度", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  done [label="任务完成或失败？", shape="diamond", style="filled", fillcolor="#FEF5E7", color="#D68910", penwidth="1.2"];
+  detail [label="完成后跳转\n检测详情页面", shape="box", style="rounded,filled", fillcolor="#EBF5FB", color="#2874A6", penwidth="1.2"];
+  end [label="提交流程结束", shape="ellipse", style="filled", fillcolor="#E8F8F5", color="#16A085", penwidth="1.5"];
+  start -> models;
+  models -> select;
+  select -> check;
+  check -> reject [label="否"];
+  reject -> select;
+  check -> submit [label="是"];
+  submit -> save;
+  save -> dataset;
+  dataset -> task;
+  task -> thread;
+  thread -> return;
+  return -> poll;
+  poll -> done;
+  done -> poll [label="未完成"];
+  done -> detail [label="completed"];
+  detail -> end;
+}
